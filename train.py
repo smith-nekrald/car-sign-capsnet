@@ -1,4 +1,5 @@
 import logging
+import gc
 
 import numpy as np
 import torch
@@ -98,8 +99,17 @@ def do_training(config: SetupConfig) -> None:
     n_classes = config.n_classes
 
     logging.info("Iterating between epochs.")
+    data = None
+    reconstructions = None
     for epoch_idx in range(n_epochs):
+        del data, reconstructions
+        gc.collect()
+        if use_cuda:
+            torch.cuda.empty_cache()
         train_epoch(epoch_idx, n_epochs, benchmark, capsule_net, optimizer, use_cuda, n_classes)
+        gc.collect()
+        if use_cuda:
+            torch.cuda.empty_cache()
         data, reconstructions = eval_epoch(
             epoch_idx, n_epochs, benchmark, capsule_net, optimizer, use_cuda, n_classes)
 
