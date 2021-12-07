@@ -2,9 +2,15 @@ from typing import Optional
 from typing import Union
 from typing import Tuple
 from typing import List
+from typing import Type
 
 from keys import BenchmarkName
 from keys import ColorSchema
+
+
+class Constants:
+    MEAN_CHINESE_GRAYSCALE = 0.4255
+    STD_CHINESE_GRAYSCALE = 0.2235
 
 
 class SetupConfig:
@@ -12,12 +18,16 @@ class SetupConfig:
         self.benchmark: Optional[str] = BenchmarkName.CHINESE
         self.image_color: Optional[str] = ColorSchema.GRAYSCALE
         self.num_channels: Optional[int] = 1
+
+        self.estimate_normalization: bool = False
+        self.n_point_to_estimate: int = 1000
+
         self.use_augmentation: Optional[bool] = True
         self.augment_proba: Optional[float] = 0.5
         self.random_entry_proba: Optional[float] = 0.1
         self.image_size: Optional[Tuple[int, int]] = (28, 28)
-        self.mean_normalize: Optional[Union[float, Tuple[float, float, float]]] = 0.4255
-        self.std_normalize: Optional[Union[float, Tuple[float, float, float]]] = 0.2235
+        self.mean_normalize: Optional[Union[float, Tuple[float, float, float]]] = Constants.MEAN_CHINESE_GRAYSCALE
+        self.std_normalize: Optional[Union[float, Tuple[float, float, float]]] = Constants.STD_CHINESE_GRAYSCALE
 
         self.use_cuda: Optional[bool] = True
         self.optimizer: Optional[str] = 'adam'
@@ -60,4 +70,5 @@ class SetupConfig:
         self.net_reconstruction_loss_reg: Optional[float] = 0.0005
         self.net_margin_left: Optional[float] = 0.9
         self.net_margin_right: Optional[float] = 0.1
+
 

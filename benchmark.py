@@ -1,16 +1,23 @@
 from typing import List
 from typing import Optional
+from typing import Tuple
+from typing import Type
+from typing import Union
+
+import numpy as np
 
 from torch.utils.data import DataLoader
-from torchvision import transforms
 from torchvision import transforms as T
 
 from dataset import ChineseDataset
+from dataset import GermanDataset
 from dataset import TransformType
 from dataset import DynamicDataset
 from config import SetupConfig
 from keys import ColorSchema
 from keys import BenchmarkName
+from keys import FileFolderPaths
+from estimate import estimate_normalization
 
 
 class IBenchmark:
@@ -71,30 +78,8 @@ class IBenchmark:
         if self.train_dataset is not None:
             self.train_dataset.static_mode()
 
-
-def build_benchmark(config: SetupConfig) -> IBenchmark:
-    if config.benchmark == BenchmarkName.CHINESE:
-        return ChineseTraffic(config)
-    else:
-        raise ValueError("Unknown benchmark name.")
-
-
-class ChineseTraffic(IBenchmark):
-    def __init__(self, config: SetupConfig) -> None:
-        super().__init__(config)
-
-        self.train_dataset: ChineseDataset = ChineseDataset(
-            path_to_img_dir='../China-TSRD/TSRD-Train-Images/',
-            path_to_annotations='../China-TSRD/TSRD-Train-Annotation/TsignRecgTrain4170Annotation.txt',
-            static_transform=self.static_transform,
-            random_transform=self.random_transform)
+    def init_loaders(self, config: SetupConfig) -> None:
         self.train_dataset.random_mode()
-
-        self.test_dataset: ChineseDataset = ChineseDataset(
-            path_to_img_dir='../China-TSRD/TSRD-Test-Images/',
-            path_to_annotations='../China-TSRD/TSRD-Test-Annotation/TsignRecgTest1994Annotation.txt',
-            static_transform=self.static_transform,
-            random_transform=self.static_transform)
         self.test_dataset.static_mode()
 
         self.train_loader: DataLoader = DataLoader(
@@ -104,3 +89,72 @@ class ChineseTraffic(IBenchmark):
 
         self.n_classes: int = self.train_dataset.n_classes
         assert (self.test_dataset.n_classes == self.train_dataset.n_classes)
+
+
+def build_benchmark(config: SetupConfig) -> IBenchmark:
+    DataSetTypeClass: Optional[Type[DynamicDataset]] = None
+    BenchmarkTypeClass: Optional[Type[IBenchmark]] = None
+    path_to_img_root: Optional[str] = None
+    path_to_annotations: Optional[str] = None
+
+    if config.benchmark == BenchmarkName.CHINESE:
+        DataSetTypeClass = ChineseDataset
+        BenchmarkTypeClass = ChineseTraffic
+        path_to_img_root = FileFolderPaths.CHINESE_TRAIN_ROOT
+        path_to_annotations = FileFolderPaths.CHINESE_TRAIN_ANNOTATIONS
+
+    elif config.benchmark == BenchmarkName.GERMANY:
+        DataSetTypeClass = GermanDataset
+        BenchmarkTypeClass = GermanTraffic
+        path_to_img_root = FileFolderPaths.GERMAN_TRAIN_ROOT
+        path_to_annotations = FileFolderPaths.GERMAN_TRAIN_ANNOTATIONS
+
+    else:
+        raise ValueError("Unknown benchmark name.")
+
+    if config.estimate_normalization:
+        mean_normalize, std_normalize = estimate_normalization(
+            path_to_img_root, path_to_annotations,
+            DataSetTypeClass,
+            config.image_color == ColorSchema.GRAYSCALE,
+            config.image_size, config.n_point_to_estimate
+        )
+        config.mean_normalize = mean_normalize.numpy()
+        config.std_normalize = std_normalize.numpy()
+    return BenchmarkTypeClass(config)
+
+
+class ChineseTraffic(IBenchmark):
+    def __init__(self, config: SetupConfig) -> None:
+        super().__init__(config)
+
+        self.train_dataset: ChineseDataset = ChineseDataset(
+            path_to_img_dir=FileFolderPaths.CHINESE_TRAIN_ROOT,
+            path_to_annotations=FileFolderPaths.CHINESE_TRAIN_ANNOTATIONS,
+            static_transform=self.static_transform,
+            random_transform=self.random_transform)
+
+        self.test_dataset: ChineseDataset = ChineseDataset(
+            path_to_img_dir=FileFolderPaths.CHINESE_TEST_ROOT,
+            path_to_annotations=FileFolderPaths.CHINESE_TEST_ANNOTATIONS,
+            static_transform=self.static_transform,
+            random_transform=self.static_transform)
+        self.init_loaders(config)
+
+
+class GermanTraffic(IBenchmark):
+    def __init__(self, config: SetupConfig) -> None:
+        super().__init__(config)
+        self.train_dataset: GermanDataset = GermanDataset(
+            path_to_img_dir=FileFolderPaths.GERMAN_TRAIN_ROOT,
+            path_to_annotations=FileFolderPaths.GERMAN_TRAIN_ANNOTATIONS,
+            static_transform=self.static_transform,
+            random_transform=self.random_transform
+        )
+        self.test_dataset: GermanDataset = GermanDataset(
+            path_to_img_dir=FileFolderPaths.GERMAN_TEST_ROOT,
+            path_to_annotations=FileFolderPaths.GERMAN_TEST_ANNOTATIONS,
+            static_transform=self.static_transform,
+            random_transform=self.static_transform
+        )
+        self.init_loaders(config)
