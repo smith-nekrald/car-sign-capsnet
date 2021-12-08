@@ -6,8 +6,10 @@ from train import do_training
 
 
 def perform_chinese_launches():
+    logging.info("Performing Chinese Launches.")
     config: SetupConfig = SetupConfig()
     do_training(config)
+    logging.info("Done with Chinese Launches.")
 
 
 def perform_german_launches():
@@ -23,3 +25,4 @@ def perform_german_launches():
 
 def perform_launches():
     perform_german_launches()
+    perform_chinese_launches()

@@ -27,8 +27,10 @@ class CapsNet(nn.Module):
 
     def forward(self, data):
         output = self.recognition_capsules(self.primary_capsules(self.conv_layer(data)))
-        reconstructions, masked = self.decoder(output, data)
-        return output, reconstructions, masked
+        class_logits = torch.sqrt((output ** 2).sum(2)).squeeze(2)
+        class_probas = F.softmax(class_logits)
+        reconstructions, masked = self.decoder(output)
+        return output, reconstructions, masked, class_probas
 
     def loss(self, data, x, target, reconstructions):
         return self.margin_loss(x, target) + self.reconstruction_loss(data, reconstructions)

@@ -54,10 +54,15 @@ class IBenchmark:
         random_list.append(augment_transform)
 
         entry_list: List[TransformType]
+        mean = np.array(config.mean_normalize)
+        std = np.array(config.std_normalize)
         for entry_list in [static_list, random_list]:
             if config.image_color == ColorSchema.GRAYSCALE:
                 entry_list.append(T.Grayscale())
-            entry_list.append(T.Normalize(config.mean_normalize, config.std_normalize))
+            entry_list.append(T.Normalize(mean.tolist(), std.tolist()))
+
+        self.normalize_transform = T.Normalize(mean.tolist(), std.tolist())
+        self.recover_normalize = T.Normalize((-mean / std).tolist(), (1.0 / std).tolist())
 
         self.static_transform: TransformType = T.Compose(static_list)
         self.random_transform: TransformType = T.Compose(random_list)
@@ -82,13 +87,24 @@ class IBenchmark:
         self.train_dataset.random_mode()
         self.test_dataset.static_mode()
 
-        self.train_loader: DataLoader = DataLoader(
-            self.train_dataset, batch_size=config.batch_size, shuffle=True)
-        self.test_loader: DataLoader = DataLoader(
-            self.test_dataset, batch_size=config.batch_size, shuffle=True)
+        self.reset_train_loader(config.batch_size)
+        self.reset_test_loader(config.batch_size)
 
         self.n_classes: int = self.train_dataset.n_classes
         assert (self.test_dataset.n_classes == self.train_dataset.n_classes)
+
+    def reset_test_loader(self, batch_size: int) -> None:
+        if self.test_loader is not None:
+            del self.test_loader
+        self.test_loader = DataLoader(
+            self.test_dataset, batch_size=batch_size, shuffle=False)
+
+    def reset_train_loader(self, batch_size: int) -> None:
+        if self.train_loader is not None:
+            del self.train_loader
+        self.train_loader = DataLoader(
+            self.train_dataset, batch_size=batch_size, shuffle=True)
+
 
 
 def build_benchmark(config: SetupConfig) -> IBenchmark:
@@ -138,7 +154,7 @@ class ChineseTraffic(IBenchmark):
             path_to_img_dir=FileFolderPaths.CHINESE_TEST_ROOT,
             path_to_annotations=FileFolderPaths.CHINESE_TEST_ANNOTATIONS,
             static_transform=self.static_transform,
-            random_transform=self.static_transform)
+            random_transform=None)
         self.init_loaders(config)
 
 
@@ -155,6 +171,6 @@ class GermanTraffic(IBenchmark):
             path_to_img_dir=FileFolderPaths.GERMAN_TEST_ROOT,
             path_to_annotations=FileFolderPaths.GERMAN_TEST_ANNOTATIONS,
             static_transform=self.static_transform,
-            random_transform=self.static_transform
+            random_transform=None
         )
         self.init_loaders(config)

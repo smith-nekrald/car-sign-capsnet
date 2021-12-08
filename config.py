@@ -2,7 +2,6 @@ from typing import Optional
 from typing import Union
 from typing import Tuple
 from typing import List
-from typing import Type
 
 from keys import BenchmarkName
 from keys import ColorSchema
@@ -15,6 +14,13 @@ class Constants:
 
 class SetupConfig:
     def __init__(self):
+        self.load_checkpoint: Optional[bool] = False
+        self.path_to_checkpoint: Optional[str] = None
+
+        self.dump_checkpoints: Optional[bool] = True
+        self.checkpoint_root: Optional[str] = './checkpoints'
+        self.checkpoint_template: Optional[str] = 'epoch_{}.cpkt'
+
         self.benchmark: Optional[str] = BenchmarkName.CHINESE
         self.image_color: Optional[str] = ColorSchema.GRAYSCALE
         self.num_channels: Optional[int] = 1
@@ -49,6 +55,8 @@ class SetupConfig:
         self.primary_num_routes: Optional[int] = 32 * 6 * 6
         self.primary_eps_denom: Optional[float] = 1e-5
         self.primary_eps_sqrt: Optional[float] = 1e-6
+        self.primary_eps_input_shift: Optional[float] = 1e-5
+        self.primary_eps_squared_shift: Optional[float] = 1e-5
 
         self.recognition_num_classes: Optional[int] = self.n_classes
         self.recognition_num_routes: Optional[int] = 32 * 6 * 6
@@ -57,6 +65,8 @@ class SetupConfig:
         self.recognition_routing_iterations: Optional[int] = 3
         self.recognition_eps_denom: Optional[float] = 1e-5
         self.recognition_eps_sqrt: Optional[float] = 1e-6
+        self.recognition_eps_input_shift: Optional[float] = 1e-5
+        self.recognition_eps_squared_shift: Optional[float] = 1e-5
 
         self.decoder_input_dimension: Optional[int] = self.recognition_num_classes * self.recognition_out_channels
         self.decoder_hidden_layers: List[int] = [512, 1024]
@@ -70,5 +80,4 @@ class SetupConfig:
         self.net_reconstruction_loss_reg: Optional[float] = 0.0005
         self.net_margin_left: Optional[float] = 0.9
         self.net_margin_right: Optional[float] = 0.1
-
 

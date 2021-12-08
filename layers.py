@@ -33,6 +33,8 @@ class PrimaryCaps(nn.Module):
         self.num_routes: int = config.primary_num_routes
         self.eps_denom: float = config.primary_eps_denom
         self.eps_sqrt: float = config.primary_eps_sqrt
+        self.eps_input_shift: float = config.primary_eps_input_shift
+        self.eps_squared_shift: float = config.primary_eps_squared_shift
 
     def forward(self, x):
         u = [capsule(x) for capsule in self.capsules]
@@ -41,7 +43,8 @@ class PrimaryCaps(nn.Module):
         return self.squash(u)
 
     def squash(self, input_tensor):
-        squared_norm = (input_tensor ** 2).sum(-1, keepdim=True)
+        input_tensor = input_tensor + self.eps_input_shift
+        squared_norm = (input_tensor ** 2).sum(-1, keepdim=True) + self.eps_squared_shift
         output_tensor = squared_norm * input_tensor / (
                     self.eps_denom + (1. + squared_norm) * torch.sqrt(squared_norm + self.eps_sqrt))
         return output_tensor
@@ -61,6 +64,8 @@ class RecognitionCaps(nn.Module):
         self.num_routing_iterations: int = config.recognition_routing_iterations
         self.eps_denom: float = config.recognition_eps_denom
         self.eps_sqrt: float = config.recognition_eps_sqrt
+        self.eps_input_shift: float = config.recognition_eps_input_shift
+        self.eps_squared_shift: float = config.recognition_eps_squared_shift
 
     def forward(self, x):
         batch_size = x.size(0)
@@ -88,7 +93,8 @@ class RecognitionCaps(nn.Module):
         return v_j.squeeze(1)
 
     def squash(self, input_tensor):
-        squared_norm = (input_tensor ** 2).sum(-1, keepdim=True)
+        input_tensor = input_tensor + self.eps_input_shift
+        squared_norm = (input_tensor ** 2).sum(-1, keepdim=True) + self.eps_squared_shift
         output_tensor = squared_norm * input_tensor / (
                     self.eps_denom + (1. + squared_norm) * torch.sqrt(squared_norm + self.eps_sqrt))
         return output_tensor
@@ -114,7 +120,7 @@ class Decoder(nn.Module):
         self.output_image_size = config.decoder_image_size
         self.num_classes = config.decoder_n_classes
 
-    def forward(self, x, data):
+    def forward(self, x):
         classes = torch.sqrt((x ** 2).sum(2))
         classes = F.softmax(classes)
 
