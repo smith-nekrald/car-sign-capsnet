@@ -1,5 +1,6 @@
 from typing import Tuple
 from typing import Optional
+from typing import Union
 
 import logging
 import os
@@ -14,10 +15,12 @@ from torch.autograd import Variable
 from torch.optim import Adam
 from torch.optim import Optimizer
 from torch.utils.tensorboard import SummaryWriter
+from torch.utils.data import DataLoader
 
 from network import CapsNet
 from config import SetupConfig
 from benchmark import build_benchmark
+from benchmark import IBenchmark
 from visualize import plot_images_separately
 from explain import explain_lime
 from explain import check_and_make_folder
@@ -25,17 +28,24 @@ from keys import NameKeys
 from checkpoint import load_checkpoint
 from checkpoint import save_checkpoint
 
+TypingFloatTensor = Union[torch.FloatTensor, torch.cuda.FloatTensor]
+TypingBoolTensor = Union[torch.BoolTensor, torch.cuda.BoolTensor]
+TypingIntTensor = Union[torch.IntTensor, torch.cuda.IntTensor]
 
-def process_epoch(epoch_idx, benchmark, capsule_net, optimizer: Optional[Optimizer],
-                  use_cuda, n_classes, writer: SummaryWriter, train_mode: bool, log_frequency: int):
+
+def process_epoch(epoch_idx: int, benchmark: IBenchmark,
+                  capsule_net: nn.Module, optimizer: Optional[Optimizer],
+                  use_cuda: bool, n_classes: int,
+                  writer: SummaryWriter, train_mode: bool, log_frequency: int):
+    data_loader: DataLoader; mode_string: str
     if train_mode:
         capsule_net.train()
         data_loader = benchmark.train_loader
-        mode_string: str = NameKeys.TRAIN_MODE_STRING
+        mode_string = NameKeys.TRAIN_MODE_STRING
     else:
         capsule_net.eval()
         data_loader = benchmark.test_loader
-        mode_string: str = NameKeys.TEST_MODE_STRING
+        mode_string = NameKeys.TEST_MODE_STRING
 
     logging.info(f"{mode_string.capitalize()}ing.")
     epoch_loss: float = 0
@@ -47,7 +57,9 @@ def process_epoch(epoch_idx, benchmark, capsule_net, optimizer: Optional[Optimiz
     running_match_count: int = 0
     running_sample_count: int = 0
 
+    data: Optional[TypingFloatTensor]; reconstructions: Optional[TypingFloatTensor]
     data, reconstructions = None, None
+
     for batch_id, (data, target) in enumerate(data_loader):
         if batch_id % log_frequency == 0:
             logging.info(f"{mode_string.capitalize()} batch {batch_id} out of {len(data_loader)}")

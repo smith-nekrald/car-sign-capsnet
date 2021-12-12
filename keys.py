@@ -19,6 +19,9 @@ class NameKeys:
     TEST_MODE_STRING: str = 'test'
     SOURCE_PNG: str = 'source.png'
     RESTORED_PNG: str = 'restored.png'
+    EXPLAIN_SRC_PNG: str = 'image-{}-explain-src.png'
+    EXPLAIN_POSITIVE_PNG: str = 'image-{}-explain-positive.png'
+    EXPLAIN_ALL_PNG: str = 'image-{}-explain-all.png'
 
 
 class FileFolderPaths:
@@ -51,5 +54,5 @@ class TableColumns:
 
 
 class Constants:
-    MEAN_CHINESE_GRAYSCALE = 0.4255
-    STD_CHINESE_GRAYSCALE = 0.2235
+    MEAN_CHINESE_GRAYSCALE: float = 0.4255
+    STD_CHINESE_GRAYSCALE: float = 0.2235

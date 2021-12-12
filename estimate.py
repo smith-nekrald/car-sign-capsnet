@@ -5,6 +5,7 @@ from typing import Union
 
 import numpy as np
 
+import torch
 from torch.nn import Module
 from torch.utils.data import DataLoader
 from torchvision.transforms import Compose
@@ -14,6 +15,9 @@ from dataset import DynamicDataset
 
 TransformType = Union[None, Compose, Module]
 NormalizationTyping = Union[Tuple[float, float], Tuple[List[float], List[float]]]
+TypingFloatTensor = Union[torch.FloatTensor, torch.cuda.FloatTensor]
+TypingBoolTensor = Union[torch.BoolTensor, torch.cuda.BoolTensor]
+TypingIntTensor = Union[torch.IntTensor, torch.cuda.IntTensor]
 
 
 def make_estimating_transformation(
@@ -36,6 +40,7 @@ def estimate_normalization(path_to_img_root: str, path_to_annotations: str,
     loader: DataLoader = DataLoader(
         dataset, batch_size=estimation_length, shuffle=True)
 
+    batch: TypingFloatTensor; target: TypingIntTensor
     batch, target = next(iter(loader))
     batch_mean: Union[float, np.array] = batch.mean().data
     batch_std: Union[float, np.array] = batch.std().data

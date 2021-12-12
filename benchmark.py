@@ -1,9 +1,11 @@
 from typing import List
 from typing import Optional
 from typing import Type
+from typing import Union
 
 import numpy as np
 
+import torch
 from torch.utils.data import DataLoader
 from torchvision import transforms as T
 
@@ -18,6 +20,8 @@ from keys import ColorSchema
 from keys import BenchmarkName
 from keys import FileFolderPaths
 from estimate import estimate_normalization
+
+TypingFloatTensor = Union[torch.FloatTensor, torch.cuda.FloatTensor]
 
 
 class IBenchmark:
@@ -53,9 +57,9 @@ class IBenchmark:
             transforms=random_core_transforms, p=config.augment_proba)
         random_list.append(augment_transform)
 
+        mean: np.array = np.array(config.mean_normalize)
+        std: np.array = np.array(config.std_normalize)
         entry_list: List[TransformType]
-        mean = np.array(config.mean_normalize)
-        std = np.array(config.std_normalize)
         for entry_list in [static_list, random_list]:
             if config.image_color == ColorSchema.GRAYSCALE:
                 entry_list.append(T.Grayscale())
@@ -75,8 +79,8 @@ class IBenchmark:
         self.train_loader: Optional[DataLoader] = None
         self.test_loader: Optional[DataLoader] = None
 
-        self.use_cuda = config.use_cuda
-        self.num_workers = config.num_load_workers
+        self.use_cuda: bool = config.use_cuda
+        self.num_workers: int = config.num_load_workers
 
     def set_random_mode(self) -> None:
         if self.train_dataset is not None:
@@ -144,10 +148,10 @@ def build_benchmark(config: ConfigBenchmark) -> IBenchmark:
         raise ValueError("Unknown benchmark name.")
 
     if config.estimate_normalization:
+        mean_normalize: TypingFloatTensor; std_normalize: TypingFloatTensor
         mean_normalize, std_normalize = estimate_normalization(
             path_to_img_root, path_to_annotations,
-            DataSetTypeClass,
-            config.image_color == ColorSchema.GRAYSCALE,
+            DataSetTypeClass, config.image_color == ColorSchema.GRAYSCALE,
             config.image_size, config.n_point_to_estimate
         )
         config.mean_normalize = mean_normalize.numpy()

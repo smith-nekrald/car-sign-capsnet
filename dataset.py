@@ -5,18 +5,14 @@ from typing import Union
 
 from abc import ABC
 import os
-import logging
 
 import pandas as pd
-import numpy as np
 from PIL import Image
 
 import torch
 from torch.nn import Module
 from torch.utils.data import Dataset
-from torch.utils.data import DataLoader
 from torchvision.transforms import Compose
-import torchvision.transforms as T
 
 from keys import TableColumns
 
@@ -40,10 +36,13 @@ class DynamicDataset(Dataset, ABC):
 
         self.root_dir: str = root_dir
         self.annotations_path: str = annotations_path
+        self.n_classes: Optional[int] = None
 
     def existence_tweak(self):
         verified_idx2class: List[int] = list()
         verified_idx2name: List[str] = list()
+
+        class_id: int; relative_path: str
         for class_id, relative_path in zip(self.idx2class, self.idx2name):
             image_path: str = os.path.join(self.root_dir, relative_path)
             if os.path.exists(image_path):
@@ -92,7 +91,7 @@ class ChineseDataset(DynamicDataset):
         self.idx2class: List[int] = list(self.annotation_df['label'])
         self.idx2name: List[str] = list(self.annotation_df['file_name'])
 
-        self.n_classes: int = max(self.idx2class) + 1
+        self.n_classes = max(self.idx2class) + 1
         self.existence_tweak()
 
 
@@ -104,12 +103,12 @@ class GermanDataset(DynamicDataset):
                          static_transform, random_transform)
         self.annotation_df: pd.DataFrame = pd.read_csv(
             path_to_annotations, sep=',', header=0, index_col=False)
-        self.idx2class: List[int] = list(
+        self.idx2class = list(
             self.annotation_df[TableColumns.GERMAN_CLASS_COLUMN])
-        self.idx2name: List[str] = list(
+        self.idx2name = list(
             self.annotation_df[TableColumns.GERMAN_PATH_COLUMN])
 
-        self.n_classes: int = max(self.idx2class) + 1
+        self.n_classes = max(self.idx2class) + 1
         self.existence_tweak()
 
 
@@ -121,12 +120,12 @@ class RussianDataset(DynamicDataset):
                          static_transform, random_transform)
         self.annotation_df: pd.DataFrame = pd.read_csv(
             path_to_annotations, sep=',', header=0, index_col=False)
-        self.idx2class: List[int] = list(
+        self.idx2class = list(
             self.annotation_df[TableColumns.RUSSIAN_CLASS_COLUMN])
-        self.idx2name: List[str] = list(
+        self.idx2name = list(
             self.annotation_df[TableColumns.RUSSIAN_PATH_COLUMN])
 
-        self.n_classes: int = max(self.idx2class) + 1
+        self.n_classes = max(self.idx2class) + 1
         self.existence_tweak()
 
 
@@ -134,7 +133,8 @@ class BelgiumDataset(DynamicDataset):
     def __init__(self, path_to_img_dir: str, path_to_annotations: Optional[str],
                  static_transform: Union[None, Compose, Module],
                  random_transform: Union[None, Compose, Module]) -> None:
-        super().__init__(path_to_img_dir, path_to_annotations, static_transform, random_transform)
+        super().__init__(path_to_img_dir, path_to_annotations,
+                         static_transform, random_transform)
         self.n_classes = 0
         sub_folder: str
         for sub_folder in os.listdir(path_to_img_dir):
