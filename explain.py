@@ -11,6 +11,8 @@ import torch
 import torchvision.transforms as T
 import torch.nn as nn
 from skimage.color import gray2rgb
+from skimage.color import label2rgb
+from lime.wrappers.scikit_image import SegmentationAlgorithm
 
 from benchmark import IBenchmark
 
@@ -51,23 +53,21 @@ def explain_lime(benchmark: IBenchmark, model: nn.Module,
 
     explainer = lime_image.LimeImageExplainer()
     predictor_fn = CapsNetCallable(model, benchmark.normalize_transform, use_cuda)
-    explanation = explainer.explain_instance(
-        image,
-        predictor_fn,
-        top_labels=5,
-        hide_color=0,
-        batch_size=16,
-        num_samples=1000)  # number of images that will be sent to classification function
+    segmenter = SegmentationAlgorithm('quickshift', kernel_size=1, max_dist=200, ratio=0.2)
+
+    explanation = explainer.explain_instance(image, predictor_fn,
+        top_labels=40, hide_color=0, batch_size=16,
+        num_samples=30000, segmentation_fn=segmenter)  # number of images that will be sent to classification function
 
     temp, mask = explanation.get_image_and_mask(
         explanation.top_labels[0], positive_only=True,
-        num_features=5, hide_rest=False)
-    img_boundary = mark_boundaries(temp / 255.0, mask)
-    plt.imsave(os.path.join(explanation_dir, "image-1.png"), img_boundary)
+        num_features=10, hide_rest=False, min_weight=0.01)
+    plt.imsave(os.path.join(explanation_dir, "image-1.png"),
+               label2rgb(mask, temp, bg_label=0))
 
     temp, mask = explanation.get_image_and_mask(
         explanation.top_labels[0], positive_only=False,
-        num_features=10, hide_rest=False)
-    img_boundary_regions = mark_boundaries(temp / 255.0, mask)
-    plt.imsave(os.path.join(explanation_dir, "image-2.png"), img_boundary_regions)
+        num_features=10, hide_rest=False, min_weight=0.01)
+    plt.imsave(os.path.join(explanation_dir, "image-2.png"),
+               label2rgb(3-mask, temp, bg_label=0))
     logging.info("Done with LIME explanation.")

@@ -125,7 +125,7 @@ class ConfigTraining:
         self.n_classes: int = 58
 
         self.log_frequency: int = 100
-        self.checkpoint_frequency: int = 5
+        self.checkpoint_frequency: int = 10
         self.n_visualize: int = 6
 
 

@@ -72,7 +72,7 @@ def perform_belgium_launches(stats: Dict[str, Any]) -> None:
     benchmark_config.benchmark = BenchmarkName.BELGIUM
 
     training_config.n_classes = 62
-    training_config.n_epochs = 5
+    training_config.n_epochs = 2
 
     benchmark_config.estimate_normalization = True
     benchmark_config.mean_normalize = None

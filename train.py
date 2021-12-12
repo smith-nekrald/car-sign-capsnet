@@ -167,10 +167,12 @@ def do_training(setup_config: SetupConfig) -> Tuple[float, int]:
     check_and_make_folder(visualizations_path)
     plot_images_separately(
         data[:training_config.n_visualize, 0].data.cpu().numpy(),
-        os.path.join(visualizations_path, NameKeys.SOURCE_PNG))
+        os.path.join(visualizations_path, NameKeys.SOURCE_PNG),
+        training_config.n_visualize)
     plot_images_separately(
         reconstructions[:training_config.n_visualize, 0].data.cpu().numpy(),
-        os.path.join(visualizations_path, NameKeys.RESTORED_PNG))
+        os.path.join(visualizations_path, NameKeys.RESTORED_PNG),
+        training_config.n_visualize)
     del data, reconstructions
 
     logging.info("Explanations.")
@@ -207,8 +209,8 @@ def dump_checkpoint(training_config, benchmark_name, checkpoint_id,
 def iterate_training(start_epoch_idx, n_epochs, benchmark, capsule_net,
             optimizer, use_cuda, n_classes, writer, training_config, benchmark_name):
     logging.info("Started training iterations.")
-    best_test_accuracy = 0.
-    epoch_on_best_test = -1
+    best_test_accuracy: float = 0.
+    epoch_on_best_test: int = -1
     data, reconstructions = None, None
     for epoch_idx in range(start_epoch_idx, n_epochs):
         logging.info(f"Epoch {epoch_idx} out of {n_epochs}.")
@@ -228,13 +230,12 @@ def iterate_training(start_epoch_idx, n_epochs, benchmark, capsule_net,
             if test_accuracy > best_test_accuracy:
                 best_test_accuracy = test_accuracy
                 epoch_on_best_test = epoch_idx
-                dump_checkpoint(training_config, benchmark_name, 'best',
+                dump_checkpoint(training_config, benchmark_name, NameKeys.BEST_CHECKPOINT,
                                 epoch_idx, capsule_net, optimizer, test_loss, test_accuracy)
 
-        if (epoch_idx % training_config.checkpoint_frequency == 1
-                or epoch_idx + 1 == n_epochs):
+        if epoch_idx % training_config.checkpoint_frequency == 1 or epoch_idx + 1 == n_epochs:
             dump_checkpoint(training_config, benchmark_name, epoch_idx + 1,
-                                epoch_idx, capsule_net, optimizer, test_loss, test_accuracy)
+                epoch_idx, capsule_net, optimizer, test_loss, test_accuracy)
     writer.close()
     logging.info("Finished training iterations.")
     return data, reconstructions, best_test_accuracy, epoch_on_best_test
