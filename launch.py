@@ -135,8 +135,8 @@ def perform_russian_launches(stats: Dict[str, Any]) -> None:
 
 def perform_launches():
     stats = OrderedDict()
-    perform_russian_launches(stats)
-    # perform_belgium_launches(stats)
+    # perform_russian_launches(stats)
+    perform_belgium_launches(stats)
     # perform_german_launches(stats)
     # perform_chinese_launches(stats)
     with open("traindir/stats.json", "w") as file_stats:

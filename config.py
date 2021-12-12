@@ -120,10 +120,13 @@ class ConfigTraining:
         self.checkpoint_template: Optional[str] = '{}_epoch_{}.cpkt'
 
         self.use_cuda: bool = True
-        self.optimizer: str = 'adam'
         self.n_epochs: int = 30
         self.batch_size: int = 16
         self.n_classes: int = 58
+
+        self.log_frequency: int = 100
+        self.checkpoint_frequency: int = 5
+        self.n_visualize: int = 6
 
 
 class SetupConfig:

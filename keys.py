@@ -10,6 +10,17 @@ class BenchmarkName:
     GERMANY:  str = 'germany'
 
 
+class NameKeys:
+    BEST_CHECKPOINT: str = 'best'
+    TRAINDIR: str = 'traindir'
+    EXPLANATIONS: str = 'explanations_{}'
+    VISUALIZATIONS: str = 'visualizations_{}'
+    TRAIN_MODE_STRING: str = 'train'
+    TEST_MODE_STRING: str = 'test'
+    SOURCE_PNG: str = 'source.png'
+    RESTORED_PNG: str = 'restored.png'
+
+
 class FileFolderPaths:
     CHINESE_TRAIN_ROOT: str = '../China-TSRD/TSRD-Train-Images/'
     CHINESE_TRAIN_ANNOTATIONS: str = '../China-TSRD/TSRD-Train-Annotation/TsignRecgTrain4170Annotation.txt'
