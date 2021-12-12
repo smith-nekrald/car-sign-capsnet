@@ -1,5 +1,5 @@
 from typing import List
-from typing import Type
+from typing import Optional
 from typing import Tuple
 from typing import Union
 
@@ -24,7 +24,7 @@ TransformType = Union[None, Compose, Module]
 
 
 class DynamicDataset(Dataset, ABC):
-    def __init__(self, root_dir: str, annotations_path: str,
+    def __init__(self, root_dir: str, annotations_path: Optional[str],
                  static_transform: TransformType,
                  random_transform: TransformType) -> None:
         super().__init__()
@@ -40,8 +40,6 @@ class DynamicDataset(Dataset, ABC):
 
         self.root_dir: str = root_dir
         self.annotations_path: str = annotations_path
-
-        self.existence_tweak()
 
     def existence_tweak(self):
         verified_idx2class: List[int] = list()
@@ -85,7 +83,8 @@ class ChineseDataset(DynamicDataset):
         super().__init__(path_to_img_dir, path_to_annotations,
                          static_transform, random_transform)
 
-        column_names: List[str] = ['file_name', 'img_width', 'img_height', 'sign_x_top', 'sign_y_top',
+        column_names: List[str] = ['file_name', 'img_width', 'img_height',
+                                   'sign_x_top', 'sign_y_top',
                                    'sign_x_bottom', 'sign_y_bottom', 'label']
         self.annotation_df: pd.DataFrame = pd.read_csv(path_to_annotations, sep=';', header=None,
                                                        index_col=False, names=column_names)
@@ -94,6 +93,7 @@ class ChineseDataset(DynamicDataset):
         self.idx2name: List[str] = list(self.annotation_df['file_name'])
 
         self.n_classes: int = max(self.idx2class) + 1
+        self.existence_tweak()
 
 
 class GermanDataset(DynamicDataset):
@@ -110,6 +110,7 @@ class GermanDataset(DynamicDataset):
             self.annotation_df[TableColumns.GERMAN_PATH_COLUMN])
 
         self.n_classes: int = max(self.idx2class) + 1
+        self.existence_tweak()
 
 
 class RussianDataset(DynamicDataset):
@@ -118,24 +119,32 @@ class RussianDataset(DynamicDataset):
                  random_transform: Union[None, Compose, Module]) -> None:
         super().__init__(path_to_img_dir, path_to_annotations,
                          static_transform, random_transform)
-        raise NotImplemented
+        self.annotation_df: pd.DataFrame = pd.read_csv(
+            path_to_annotations, sep=',', header=0, index_col=False)
+        self.idx2class: List[int] = list(
+            self.annotation_df[TableColumns.RUSSIAN_CLASS_COLUMN])
+        self.idx2name: List[str] = list(
+            self.annotation_df[TableColumns.RUSSIAN_PATH_COLUMN])
 
-    def __len__(self):
-        raise NotImplemented
-
-    def __getitem(self, idx):
-        raise NotImplemented
+        self.n_classes: int = max(self.idx2class) + 1
+        self.existence_tweak()
 
 
-class BelgianDataset(DynamicDataset):
-    def __init__(self, path_to_img_dir: str, path_to_annotations: str,
+class BelgiumDataset(DynamicDataset):
+    def __init__(self, path_to_img_dir: str, path_to_annotations: Optional[str],
                  static_transform: Union[None, Compose, Module],
                  random_transform: Union[None, Compose, Module]) -> None:
         super().__init__(path_to_img_dir, path_to_annotations, static_transform, random_transform)
-        raise NotImplemented
-
-    def __len__(self):
-        raise NotImplemented
-
-    def __getitem(self, idx):
-        raise NotImplemented
+        self.n_classes = 0
+        sub_folder: str
+        for sub_folder in os.listdir(path_to_img_dir):
+            candidate_directory: str = os.path.join(path_to_img_dir, sub_folder)
+            if os.path.isdir(candidate_directory):
+                image_name: str
+                for image_name in os.listdir(candidate_directory):
+                    if image_name.endswith(".ppm"):
+                        image_class: int = int(sub_folder)
+                        image_path: str = os.path.join(sub_folder, image_name)
+                        self.idx2class.append(image_class)
+                        self.idx2name.append(image_path)
+                        self.n_classes = max(self.n_classes, image_class + 1)

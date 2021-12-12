@@ -13,6 +13,7 @@ import torchvision.transforms as T
 from dataset import DynamicDataset
 
 TransformType = Union[None, Compose, Module]
+NormalizationTyping = Union[Tuple[float, float], Tuple[List[float], List[float]]]
 
 
 def make_estimating_transformation(
@@ -24,7 +25,6 @@ def make_estimating_transformation(
     return estimate_transform
 
 
-NormalizationTyping = Union[Tuple[float, float], Tuple[List[float], List[float]]]
 def estimate_normalization(path_to_img_root: str, path_to_annotations: str,
                            DataSetType: Type[DynamicDataset],
                            use_grayscale: bool, image_size: Tuple[int, int],

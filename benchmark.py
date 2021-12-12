@@ -9,6 +9,8 @@ from torchvision import transforms as T
 
 from dataset import ChineseDataset
 from dataset import GermanDataset
+from dataset import BelgiumDataset
+from dataset import RussianDataset
 from dataset import TransformType
 from dataset import DynamicDataset
 from config import ConfigBenchmark
@@ -33,7 +35,7 @@ class IBenchmark:
             T.RandomHorizontalFlip(p=1),
             T.RandomRotation(degrees=15),
             T.ColorJitter(contrast=(0.5, 2.0), saturation=(0.5, 2.0),
-                                   brightness=(0.5, 2.0), hue=0.4),
+                          brightness=(0.5, 2.0), hue=0.4),
             T.GaussianBlur(kernel_size=(5, 9), sigma=(0.1, 5)),
             T.RandomPerspective(distortion_scale=0.6, p=1.0),
             T.RandomResizedCrop(size=config.image_size),
@@ -127,6 +129,17 @@ def build_benchmark(config: ConfigBenchmark) -> IBenchmark:
         path_to_img_root = FileFolderPaths.GERMAN_TRAIN_ROOT
         path_to_annotations = FileFolderPaths.GERMAN_TRAIN_ANNOTATIONS
 
+    elif config.benchmark == BenchmarkName.BELGIUM:
+        DataSetTypeClass = BelgiumDataset
+        BenchmarkTypeClass = BelgiumTraffic
+        path_to_img_root = FileFolderPaths.BELGIUM_TRAIN_ROOT
+        path_to_annotations = FileFolderPaths.BELGIUM_TRAIN_ANNOTATIONS
+
+    elif config.benchmark == BenchmarkName.RUSSIAN:
+        DataSetTypeClass = RussianDataset
+        BenchmarkTypeClass = RussianTraffic
+        path_to_img_root = FileFolderPaths.RUSSIAN_TRAIN_ROOT
+        path_to_annotations = FileFolderPaths.RUSSIAN_TRAIN_ANNOTATIONS
     else:
         raise ValueError("Unknown benchmark name.")
 
@@ -172,6 +185,42 @@ class GermanTraffic(IBenchmark):
         self.test_dataset: GermanDataset = GermanDataset(
             path_to_img_dir=FileFolderPaths.GERMAN_TEST_ROOT,
             path_to_annotations=FileFolderPaths.GERMAN_TEST_ANNOTATIONS,
+            static_transform=self.static_transform,
+            random_transform=None
+        )
+        self.init_loaders(config)
+
+
+class BelgiumTraffic(IBenchmark):
+    def __init__(self, config: ConfigBenchmark) -> None:
+        super().__init__(config)
+        self.train_dataset: BelgiumDataset = BelgiumDataset(
+            path_to_img_dir=FileFolderPaths.BELGIUM_TRAIN_ROOT,
+            path_to_annotations=FileFolderPaths.BELGIUM_TRAIN_ANNOTATIONS,
+            static_transform=self.static_transform,
+            random_transform=self.random_transform
+        )
+        self.test_dataset: BelgiumDataset = BelgiumDataset(
+            path_to_img_dir=FileFolderPaths.BELGIUM_TEST_ROOT,
+            path_to_annotations=FileFolderPaths.BELGIUM_TEST_ANNOTATIONS,
+            static_transform=self.static_transform,
+            random_transform=None
+        )
+        self.init_loaders(config)
+
+
+class RussianTraffic(IBenchmark):
+    def __init__(self, config: ConfigBenchmark) -> None:
+        super().__init__(config)
+        self.train_dataset: RussianDataset = RussianDataset(
+            path_to_img_dir=FileFolderPaths.RUSSIAN_TRAIN_ROOT,
+            path_to_annotations=FileFolderPaths.RUSSIAN_TRAIN_ANNOTATIONS,
+            static_transform=self.static_transform,
+            random_transform=self.random_transform
+        )
+        self.test_dataset: RussianDataset = RussianDataset(
+            path_to_img_dir=FileFolderPaths.RUSSIAN_TEST_ROOT,
+            path_to_annotations=FileFolderPaths.RUSSIAN_TEST_ANNOTATIONS,
             static_transform=self.static_transform,
             random_transform=None
         )
