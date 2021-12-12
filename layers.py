@@ -2,6 +2,9 @@ from typing import Union
 from typing import Optional
 from typing import Tuple
 from typing import List
+from typing import Any
+
+import logging
 
 import torch
 import torch.cuda
@@ -18,6 +21,30 @@ from config import ConfigReconstruction
 TypingFloatTensor = Union[torch.FloatTensor, torch.cuda.FloatTensor]
 TypingBoolTensor = Union[torch.BoolTensor, torch.cuda.BoolTensor]
 TypingIntTensor = Union[torch.IntTensor, torch.cuda.IntTensor]
+
+
+def fix_nan_gradient_hook(gradient: TypingFloatTensor) -> Optional[TypingFloatTensor]:
+    if torch.any(torch.isnan(gradient)):
+        logging.info("Fixing NaN gradient.")
+        fixed_gradient: TypingFloatTensor = torch.where(
+            torch.logical_not(torch.isnan(gradient)), gradient,
+            torch.zeros_like(gradient).to(gradient.device))
+        return fixed_gradient
+
+
+def nan_gradient_hook_module(module: nn.Module, in_gradient: TypingFloatTensor,
+                      out_gradient: TypingFloatTensor) -> Optional[TypingFloatTensor]:
+    rewrite_grads: bool = False
+    fixed_list = list()
+    for grad_entry in out_gradient:
+        fixed_grad = fix_nan_gradient_hook(grad_entry)
+        if fixed_grad is not None:
+            fixed_list.append(fixed_grad)
+            rewrite_grads = True
+        else:
+            fixed_list.append(grad_entry)
+    if rewrite_grads:
+        return fixed_list
 
 
 class SquashLayer(nn.Module):
@@ -68,6 +95,12 @@ class PrimaryCaps(nn.Module):
                       stride=primary_config.conv_stride,
                       padding=primary_config.conv_padding)
             for _ in range(primary_config.num_capsules)])
+        self.hook_handles: List[Any] = list()
+        if primary_config.use_nan_gradient_hook:
+            entry: nn.Module
+            for entry in self.capsules:
+                handle: Any = entry.register_full_backward_hook(nan_gradient_hook_module)
+                self.hook_handles.append(handle)
         self.dropouts: nn.ModuleList = nn.ModuleList([
             nn.Dropout(p=primary_config.dropout_proba)
             for _ in range(primary_config.num_capsules)
@@ -75,6 +108,12 @@ class PrimaryCaps(nn.Module):
         self.capsule_output_dim: int = primary_config.capsule_output_dim
         self.squash: nn.Module = SquashLayer(squash_config)
         self.use_dropout: bool = primary_config.use_dropout
+
+    def remove_hooks(self) -> None:
+        handle: Any
+        for handle in self.hook_handles:
+            handle.remove()
+        self.hook_handles = list()
 
     def forward(self, input_tensor: TypingFloatTensor) -> TypingFloatTensor:
         capsule_list: List[TypingFloatTensor]
@@ -156,11 +195,20 @@ class RecognitionCaps(nn.Module):
             recognition_config.output_caps_dim,
             recognition_config.input_caps_dim))
 
+        self.W_hook_handle: Any = None
+        if recognition_config.use_nan_gradient_hook:
+            self.W_hook_handle = self.W_matrix_5d.register_hook(fix_nan_gradient_hook)
+
         self.agreement_routing: nn.Module = AgreementRouting(
             agreement_config, squash_config)
 
         self.dropout: nn.Module = nn.Dropout(p=recognition_config.dropout_proba)
         self.use_dropout: bool = recognition_config.use_dropout
+
+    def remove_hooks(self) -> None:
+        if self.W_hook_handle is not None:
+            self.W_hook_handle.remove()
+            self.W_hook_handle = None
 
     def forward(self, input_tensor: TypingFloatTensor) -> TypingFloatTensor:
         batch_size: Union[int, torch.int32] = input_tensor.size(0)

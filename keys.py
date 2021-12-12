@@ -22,6 +22,9 @@ class NameKeys:
     EXPLAIN_SRC_PNG: str = 'image-{}-explain-src.png'
     EXPLAIN_POSITIVE_PNG: str = 'image-{}-explain-positive.png'
     EXPLAIN_ALL_PNG: str = 'image-{}-explain-all.png'
+    STATS_JSON: str = 'stats.json'
+    STATS_TEX: str = 'stats.tex'
+    STATS_XLSX: str = 'stats.xlsx'
 
 
 class FileFolderPaths:
@@ -51,6 +54,12 @@ class TableColumns:
     GERMAN_PATH_COLUMN: str = 'Path'
     RUSSIAN_CLASS_COLUMN: str = 'class_number'
     RUSSIAN_PATH_COLUMN: str = 'filename'
+
+
+class StatsTableKeys:
+    DATASET: str = 'benchmark'
+    ACCURACY: str = 'accuracy'
+    EPOCH: str = 'epoch'
 
 
 class Constants:

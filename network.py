@@ -33,6 +33,10 @@ class CapsNet(nn.Module):
 
         self.mse_loss: nn.Module = nn.MSELoss()
 
+    def remove_hooks(self) -> None:
+        self.primary_capsules.remove_hooks()
+        self.recognition_capsules.remove_hooks()
+
     def forward(self, input_tensor: TypingFloatTensor
                 ) -> Tuple[TypingFloatTensor, TypingFloatTensor,
                            TypingFloatTensor, TypingFloatTensor]:

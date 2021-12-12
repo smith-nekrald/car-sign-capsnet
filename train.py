@@ -19,6 +19,8 @@ from torch.utils.data import DataLoader
 
 from network import CapsNet
 from config import SetupConfig
+from config import ConfigBenchmark
+from config import ConfigTraining
 from benchmark import build_benchmark
 from benchmark import IBenchmark
 from visualize import plot_images_separately
@@ -31,12 +33,16 @@ from checkpoint import save_checkpoint
 TypingFloatTensor = Union[torch.FloatTensor, torch.cuda.FloatTensor]
 TypingBoolTensor = Union[torch.BoolTensor, torch.cuda.BoolTensor]
 TypingIntTensor = Union[torch.IntTensor, torch.cuda.IntTensor]
+ProcessEpochReturnTyping = Union[Tuple[float, float], Tuple[
+    TypingFloatTensor, TypingFloatTensor, float, float]]
 
 
 def process_epoch(epoch_idx: int, benchmark: IBenchmark,
                   capsule_net: nn.Module, optimizer: Optional[Optimizer],
                   use_cuda: bool, n_classes: int,
-                  writer: SummaryWriter, train_mode: bool, log_frequency: int):
+                  writer: SummaryWriter, train_mode: bool, log_frequency: int,
+                  use_clipping: bool, clip_value: Optional[float]
+                  ) -> ProcessEpochReturnTyping:
     data_loader: DataLoader; mode_string: str
     if train_mode:
         capsule_net.train()
@@ -59,11 +65,12 @@ def process_epoch(epoch_idx: int, benchmark: IBenchmark,
 
     data: Optional[TypingFloatTensor]; reconstructions: Optional[TypingFloatTensor]
     data, reconstructions = None, None
-
-    for batch_id, (data, target) in enumerate(data_loader):
+    batch_id: int; labels: TypingIntTensor
+    for batch_id, (data, labels) in enumerate(data_loader):
         if batch_id % log_frequency == 0:
             logging.info(f"{mode_string.capitalize()} batch {batch_id} out of {len(data_loader)}")
-        target = torch.sparse.torch.eye(n_classes).index_select(dim=0, index=target)
+        target: TypingFloatTensor
+        target = torch.sparse.torch.eye(n_classes).index_select(dim=0, index=labels)
         data, target = Variable(data), Variable(target)
 
         if use_cuda:
@@ -72,16 +79,21 @@ def process_epoch(epoch_idx: int, benchmark: IBenchmark,
         if train_mode:
             optimizer.zero_grad()
 
-        output, reconstructions, masked, class_probas = capsule_net(data)
+        output: TypingFloatTensor; reconstructions: TypingFloatTensor
+        select_mask: TypingFloatTensor; class_probas: TypingFloatTensor
+        output, reconstructions, select_mask, class_probas = capsule_net(data)
+        batch_loss: TypingFloatTensor
         batch_loss = capsule_net.loss(data, output, target, reconstructions)
 
         if train_mode:
             batch_loss.backward()
+            if use_clipping:
+                torch.nn.utils.clip_grad_norm_(capsule_net.parameters(), clip_value, norm_type=2.0)
             optimizer.step()
 
         epoch_loss += batch_loss.data.item() * data.shape[0]
 
-        batch_match_count = sum(np.argmax(masked.data.cpu().numpy(), 1)
+        batch_match_count: int = sum(np.argmax(select_mask.data.cpu().numpy(), 1)
                                 == np.argmax(target.data.cpu().numpy(), 1))
         accuracy_match_count += batch_match_count
         sample_count += data.shape[0]
@@ -117,24 +129,30 @@ def process_epoch(epoch_idx: int, benchmark: IBenchmark,
     return data, reconstructions, avg_epoch_loss, epoch_accuracy
 
 
-def train_epoch(epoch_idx, benchmark, capsule_net, optimizer,
-                use_cuda, n_classes, writer: SummaryWriter, log_frequency: int):
+def train_epoch(epoch_idx: int, benchmark: IBenchmark, capsule_net: nn.Module,
+                optimizer: Optimizer, use_cuda: bool, n_classes: int,
+                writer: SummaryWriter, log_frequency: int,
+                use_clipping: bool, clip_threshold: Optional[float]
+                ) -> ProcessEpochReturnTyping:
     return process_epoch(epoch_idx, benchmark, capsule_net, optimizer,
-                  use_cuda, n_classes, writer, True, log_frequency)
+                  use_cuda, n_classes, writer, True, log_frequency,
+                  use_clipping, clip_threshold)
 
 
-def eval_epoch(epoch_idx, benchmark, capsule_net,
-               use_cuda, n_classes, writer: SummaryWriter, log_frequency: int):
+def eval_epoch(epoch_idx: int, benchmark: IBenchmark, capsule_net: nn.Module,
+               use_cuda: bool, n_classes: int, writer: SummaryWriter, log_frequency: int
+               ) -> ProcessEpochReturnTyping:
     return process_epoch(epoch_idx, benchmark, capsule_net, None,
-                         use_cuda, n_classes, writer, False, log_frequency)
+                         use_cuda, n_classes, writer, False,
+                         log_frequency, False, None)
 
 
 def do_training(setup_config: SetupConfig) -> Tuple[float, int]:
     logging.info("Started training.")
 
-    benchmark_config = setup_config.benchmark_config
-    benchmark_name = benchmark_config.benchmark
-    training_config = setup_config.training_config
+    benchmark_config: ConfigBenchmark = setup_config.benchmark_config
+    benchmark_name: str = benchmark_config.benchmark
+    training_config: ConfigTraining = setup_config.training_config
 
     if training_config.debug_mode:
         torch.autograd.set_detect_anomaly(True)
@@ -147,10 +165,10 @@ def do_training(setup_config: SetupConfig) -> Tuple[float, int]:
 
     use_cuda: bool = training_config.use_cuda
     if use_cuda:
-        capsule_net = capsule_net.cuda()
+        capsule_net: nn.Module = capsule_net.cuda()
         logging.info("Transferred CapsNet to CUDA.")
 
-    optimizer = Adam(capsule_net.parameters())
+    optimizer: Optimizer = Adam(capsule_net.parameters())
     logging.info("Optimizer is built.")
 
     start_epoch_idx: int = 0
@@ -159,40 +177,53 @@ def do_training(setup_config: SetupConfig) -> Tuple[float, int]:
                                           capsule_net, optimizer, use_cuda)
         logging.info("Loaded checkpoint.")
 
-    benchmark = build_benchmark(benchmark_config)
+    benchmark: IBenchmark = build_benchmark(benchmark_config)
     logging.info("Benchmark is built.")
 
     writer: SummaryWriter = SummaryWriter(
         os.path.join(NameKeys.TRAINDIR, benchmark_name),
         filename_suffix=benchmark_name, flush_secs=60)
-    images, labels = next(iter(benchmark.train_loader))
-    writer.add_graph(capsule_net, images.cuda())
 
+    data: TypingFloatTensor; reconstructions: TypingFloatTensor
+    best_test_accuracy: float; epoch_on_best_test: int
     data, reconstructions, best_test_accuracy, epoch_on_best_test = iterate_training(
         start_epoch_idx, training_config.n_epochs, benchmark, capsule_net,
         optimizer, use_cuda, training_config.n_classes, writer, training_config,
         benchmark_name)
 
+    image: TypingFloatTensor; labels: TypingIntTensor
+    images, labels = next(iter(benchmark.train_loader))
+    if training_config.graph_to_tensorboard:
+        capsule_net.remove_hooks()
+        writer.add_graph(capsule_net, images.cuda())
+
     logging.info("Visualizations.")
     visualizations_path: str = os.path.join(NameKeys.TRAINDIR,
                                           NameKeys.VISUALIZATIONS.format(benchmark_name))
     check_and_make_folder(visualizations_path)
+    n_visualize: int = min(training_config.n_visualize, data.cpu().numpy().shape[0])
     plot_images_separately(
-        data[:training_config.n_visualize, 0].data.cpu().numpy(),
+        data[:n_visualize, 0].data.cpu().numpy(),
         os.path.join(visualizations_path, NameKeys.SOURCE_PNG),
-        training_config.n_visualize)
+        n_visualize)
     plot_images_separately(
-        reconstructions[:training_config.n_visualize, 0].data.cpu().numpy(),
+        reconstructions[:n_visualize, 0].data.cpu().numpy(),
         os.path.join(visualizations_path, NameKeys.RESTORED_PNG),
-        training_config.n_visualize)
+        n_visualize)
     del data, reconstructions
 
-    logging.info("Explanations.")
-    explanations_path: str = os.path.join(NameKeys.TRAINDIR,
-                                          NameKeys.EXPLANATIONS.format(benchmark_name))
-    check_and_make_folder(explanations_path)
-    explain_lime(benchmark, capsule_net,
-                 training_config.use_cuda, explanations_path)
+    if training_config.use_lime:
+        logging.info("Started explanations.")
+        load_checkpoint(os.path.join(training_config.checkpoint_root,
+                        training_config.checkpoint_template.format(
+                        benchmark_name, NameKeys.BEST_CHECKPOINT)),
+                        capsule_net, optimizer, training_config.use_cuda)
+        explanations_path: str = os.path.join(NameKeys.TRAINDIR,
+                                              NameKeys.EXPLANATIONS.format(benchmark_name))
+        check_and_make_folder(explanations_path)
+        explain_lime(benchmark, capsule_net,
+                     training_config.use_cuda, explanations_path)
+        logging.info("Finished explanations.")
 
     logging.info("Finished training.")
     return best_test_accuracy, epoch_on_best_test
@@ -204,9 +235,9 @@ def cuda_cache_reset(use_cuda: bool) -> None:
         torch.cuda.empty_cache()
 
 
-def dump_checkpoint(training_config, benchmark_name, checkpoint_id,
-                    epoch_idx, capsule_net, optimizer,
-                    test_loss, test_accuracy) -> None:
+def dump_checkpoint(training_config: ConfigTraining, benchmark_name: str,
+                    checkpoint_id: str, epoch_idx: int, capsule_net: nn.Module,
+                    optimizer: Optimizer, test_loss: float, test_accuracy: float) -> None:
     if not training_config.dump_checkpoints:
         return
     if not os.path.isdir(training_config.checkpoint_root):
@@ -218,19 +249,25 @@ def dump_checkpoint(training_config, benchmark_name, checkpoint_id,
                     test_loss, test_accuracy)
 
 
-def iterate_training(start_epoch_idx, n_epochs, benchmark, capsule_net,
-            optimizer, use_cuda, n_classes, writer, training_config, benchmark_name):
+def iterate_training(start_epoch_idx: int, n_epochs: int, benchmark: IBenchmark,
+                     capsule_net: nn.Module, optimizer: Optimizer, use_cuda: bool,
+                     n_classes: int, writer: SummaryWriter,
+                     training_config: ConfigTraining, benchmark_name: str
+                     ) -> Tuple[TypingFloatTensor, TypingFloatTensor, float, int]:
     logging.info("Started training iterations.")
     best_test_accuracy: float = 0.
     epoch_on_best_test: int = -1
+    data: TypingFloatTensor; reconstructions: TypingFloatTensor
     data, reconstructions = None, None
+    epoch_idx: int
     for epoch_idx in range(start_epoch_idx, n_epochs):
-        logging.info(f"Epoch {epoch_idx} out of {n_epochs}.")
+        logging.info(f"Epoch {epoch_idx + 1} out of {n_epochs}.")
         del data, reconstructions
         cuda_cache_reset(use_cuda)
         train_epoch(epoch_idx, benchmark, capsule_net,
             optimizer, use_cuda, n_classes, writer,
-            training_config.log_frequency)
+            training_config.log_frequency, training_config.use_clipping,
+            training_config.clipping_threshold)
 
         cuda_cache_reset(use_cuda)
         with torch.no_grad():
@@ -246,7 +283,7 @@ def iterate_training(start_epoch_idx, n_epochs, benchmark, capsule_net,
                                 epoch_idx, capsule_net, optimizer, test_loss, test_accuracy)
 
         if epoch_idx % training_config.checkpoint_frequency == 1 or epoch_idx + 1 == n_epochs:
-            dump_checkpoint(training_config, benchmark_name, epoch_idx + 1,
+            dump_checkpoint(training_config, benchmark_name, f"{epoch_idx + 1}",
                 epoch_idx, capsule_net, optimizer, test_loss, test_accuracy)
     writer.close()
     logging.info("Finished training iterations.")

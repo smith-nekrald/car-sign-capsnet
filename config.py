@@ -36,6 +36,7 @@ class ConfigPrimary:
         self.capsule_output_dim: int = 24 * 6 * 6
         self.use_dropout: bool = True
         self.dropout_proba: float = 0.4
+        self.use_nan_gradient_hook: bool = False
 
 
 class ConfigAgreement:
@@ -55,6 +56,7 @@ class ConfigRecognition:
         self.input_caps_dim: int = 24 * 6 * 6
         self.use_dropout: bool = True
         self.dropout_proba: float = 0.4
+        self.use_nan_gradient_hook: bool = False
 
 
 class ConfigReconstruction:
@@ -124,9 +126,15 @@ class ConfigTraining:
         self.batch_size: int = 16
         self.n_classes: int = 58
 
+        self.use_clipping: bool = False
+        self.clipping_threshold: Optional[float] = 100.
+
         self.log_frequency: int = 100
         self.checkpoint_frequency: int = 10
         self.n_visualize: int = 6
+
+        self.graph_to_tensorboard: bool = True
+        self.use_lime: bool = True
 
 
 class SetupConfig:
