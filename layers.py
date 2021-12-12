@@ -1,138 +1,226 @@
+from typing import Union
+from typing import Optional
+from typing import Tuple
+from typing import List
+
 import torch
+import torch.cuda
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.autograd import Variable
 
-from config import SetupConfig
+from config import ConfigSquash
+from config import ConfigConv
+from config import ConfigPrimary
+from config import ConfigAgreement
+from config import ConfigRecognition
+from config import ConfigReconstruction
+
+TypingFloatTensor = Union[torch.FloatTensor, torch.cuda.FloatTensor]
+TypingBoolTensor = Union[torch.BoolTensor, torch.cuda.BoolTensor]
+TypingIntTensor = Union[torch.IntTensor, torch.cuda.IntTensor]
+
+
+class SquashLayer(nn.Module):
+    def __init__(self, config: ConfigSquash) -> None:
+        super(SquashLayer, self).__init__()
+        self.eps_denom: float = config.eps_denom
+        self.eps_sqrt: float = config.eps_sqrt
+        self.eps_input: float = config.eps_input
+        self.eps_norm: float = config.eps_norm
+
+    def forward(self, input_tensor: TypingFloatTensor) -> TypingFloatTensor:
+        shifted_tensor: TypingFloatTensor = input_tensor + self.eps_input
+        squared_norm: TypingFloatTensor = (shifted_tensor ** 2).sum(
+            -1, keepdim=True) + self.eps_norm
+        scaling_factor: TypingFloatTensor = squared_norm / (self.eps_denom
+            + (1. + squared_norm) * torch.sqrt(squared_norm + self.eps_sqrt))
+        output_tensor: TypingFloatTensor = scaling_factor * shifted_tensor
+        return output_tensor
 
 
 class ConvLayer(nn.Module):
-    def __init__(self, config: SetupConfig):
+    def __init__(self, config: ConfigConv) -> None:
         super(ConvLayer, self).__init__()
-        self.conv = nn.Conv2d(in_channels=config.conv_in_channels,
-                               out_channels=config.conv_out_channels,
-                               kernel_size=config.conv_kernel_size,
-                               stride=config.conv_stride)
+        self.conv: nn.Module = nn.Conv2d(in_channels=config.in_channels,
+                               out_channels=config.out_channels,
+                               kernel_size=config.kernel_size,
+                               stride=config.stride)
+        self.batch_norm: nn.Module = nn.BatchNorm2d(config.out_channels)
+        self.use_batch_norm: bool = config.use_batch_norm
 
-    def forward(self, x):
-        return F.relu(self.conv(x))
+    def forward(self, input_tensor: TypingFloatTensor) -> TypingFloatTensor:
+        convolved_input: TypingFloatTensor = self.conv(input_tensor)
+        to_activate: TypingFloatTensor = convolved_input
+        if self.use_batch_norm:
+            to_activate = self.batch_norm(convolved_input)
+        output_tensor: TypingFloatTensor = F.relu(to_activate)
+        return output_tensor
 
 
 class PrimaryCaps(nn.Module):
-    def __init__(self, config: SetupConfig) -> None:
+    def __init__(self, primary_config: ConfigPrimary,
+                 squash_config: ConfigSquash) -> None:
         super(PrimaryCaps, self).__init__()
+        self.capsules: nn.ModuleList = nn.ModuleList([
+            nn.Conv2d(in_channels=primary_config.in_conv_channels,
+                      out_channels=primary_config.out_conv_channels,
+                      kernel_size=primary_config.conv_kernel_size,
+                      stride=primary_config.conv_stride,
+                      padding=primary_config.conv_padding)
+            for _ in range(primary_config.num_capsules)])
+        self.dropouts: nn.ModuleList = nn.ModuleList([
+            nn.Dropout(p=primary_config.dropout_proba)
+            for _ in range(primary_config.num_capsules)
+        ])
+        self.capsule_output_dim: int = primary_config.capsule_output_dim
+        self.squash: nn.Module = SquashLayer(squash_config)
+        self.use_dropout: bool = primary_config.use_dropout
 
-        self.capsules = nn.ModuleList([
-            nn.Conv2d(in_channels=config.primary_in_channels,
-                      out_channels=config.primary_out_channels,
-                      kernel_size=config.primary_kernel_size,
-                      stride=config.primary_stride,
-                      padding=config.primary_padding)
-            for _ in range(config.primary_num_capsules)])
+    def forward(self, input_tensor: TypingFloatTensor) -> TypingFloatTensor:
+        capsule_list: List[TypingFloatTensor]
+        if self.use_dropout:
+            capsule_list = [drop(capsule(input_tensor))
+                            for capsule, drop in zip(self.capsules, self.dropouts)]
+        else:
+            capsule_list = [capsule(input_tensor) for capsule in self.capsules]
 
-        self.num_routes: int = config.primary_num_routes
-        self.eps_denom: float = config.primary_eps_denom
-        self.eps_sqrt: float = config.primary_eps_sqrt
-        self.eps_input_shift: float = config.primary_eps_input_shift
-        self.eps_squared_shift: float = config.primary_eps_squared_shift
+        stacked_capsules: TypingFloatTensor = torch.stack(capsule_list, dim=1)
+        batch_size: Union[int, torch.int] = input_tensor.size(0)
+        presquashed_capsules: TypingFloatTensor = stacked_capsules.view(
+            batch_size, -1, self.capsule_output_dim)
+        squashed_capsules: TypingFloatTensor = self.squash(presquashed_capsules)
+        return squashed_capsules
 
-    def forward(self, x):
-        u = [capsule(x) for capsule in self.capsules]
-        u = torch.stack(u, dim=1)
-        u = u.view(x.size(0), self.num_routes, -1)
-        return self.squash(u)
 
-    def squash(self, input_tensor):
-        input_tensor = input_tensor + self.eps_input_shift
-        squared_norm = (input_tensor ** 2).sum(-1, keepdim=True) + self.eps_squared_shift
-        output_tensor = squared_norm * input_tensor / (
-                    self.eps_denom + (1. + squared_norm) * torch.sqrt(squared_norm + self.eps_sqrt))
-        return output_tensor
+class AgreementRouting(nn.Module):
+    def __init__(self, agreement_config: ConfigAgreement,
+                 squash_config: ConfigSquash) -> None:
+        super(AgreementRouting, self).__init__()
+
+        self.n_iterations: int = agreement_config.n_iterations
+        assert self.n_iterations > 0
+
+        self.num_input_caps: int = agreement_config.num_input_caps
+        self.num_output_caps: int = agreement_config.num_output_caps
+        self.output_caps_dim: int = agreement_config.output_caps_dim
+        self.use_cuda: bool = agreement_config.use_cuda
+        self.squash: nn.Module = SquashLayer(squash_config)
+
+    def forward(self, u_ji_predict_5d: TypingFloatTensor) -> TypingFloatTensor:
+        u_ji_predict_4d: TypingFloatTensor = u_ji_predict_5d.squeeze(4)
+        assert len(u_ji_predict_4d.shape) == 4
+
+        batch_size: Union[int, torch.int32]; num_input_caps: Union[int, torch.int32]
+        num_output_caps: Union[int, torch.int32]; output_caps_dim: Union[int, torch.int32]
+        batch_size, num_input_caps, num_output_caps, output_caps_dim = u_ji_predict_4d.size()
+
+        assert self.num_input_caps == num_input_caps, f"{self.num_input_caps} != {num_input_caps}"
+        assert self.num_output_caps == num_output_caps, f"{self.num_output_caps} != {num_output_caps}"
+        assert self.output_caps_dim == output_caps_dim, f"{self.output_caps_dim} != {output_caps_dim}"
+
+        b_ij_batch_3d: TypingFloatTensor = torch.zeros(
+            batch_size, num_input_caps, num_output_caps)
+        if self.use_cuda:
+            b_ij_batch_3d = b_ij_batch_3d.cuda()
+
+        v_j_squashed_3d: Optional[TypingFloatTensor] = None
+        if self.n_iterations > 0:
+            idx_iteration: int
+            for idx_iteration in range(self.n_iterations):
+                b_i_2d: TypingFloatTensor = b_ij_batch_3d.view(-1, num_output_caps)
+                c_ij_2d: TypingFloatTensor = F.softmax(b_i_2d, dim=1)
+                c_ij_4d: TypingFloatTensor = c_ij_2d.view(-1, num_input_caps, num_output_caps, 1)
+                s_j_3d: TypingFloatTensor = (c_ij_4d * u_ji_predict_4d).sum(dim=1)
+                v_j_squashed_3d = self.squash(s_j_3d)
+                v_j_aligned_4d: TypingFloatTensor = v_j_squashed_3d.unsqueeze(1)
+                b_ij_batch_3d = b_ij_batch_3d + (u_ji_predict_4d * v_j_aligned_4d).sum(-1)
+
+        assert v_j_squashed_3d is not None
+        return v_j_squashed_3d
 
 
 class RecognitionCaps(nn.Module):
-    def __init__(self, config: SetupConfig):
+    def __init__(self, recognition_config: ConfigRecognition,
+                 agreement_config: ConfigAgreement,
+                 squash_config: ConfigSquash) -> None:
         super(RecognitionCaps, self).__init__()
 
-        self.in_channels = config.recognition_in_channels
-        self.num_routes = config.recognition_num_routes
-        self.num_capsules = config.recognition_num_classes
+        self.num_input_caps: int = recognition_config.num_input_caps
+        self.input_caps_dim: int = recognition_config.input_caps_dim
+        self.num_output_caps: int = recognition_config.num_output_caps
+        self.output_caps_dim: int = recognition_config.output_caps_dim
 
-        self.W = nn.Parameter(torch.randn(1, self.num_routes, self.num_capsules,
-            config.recognition_out_channels, config.recognition_in_channels))
-        self.use_cuda: bool = config.use_cuda
-        self.num_routing_iterations: int = config.recognition_routing_iterations
-        self.eps_denom: float = config.recognition_eps_denom
-        self.eps_sqrt: float = config.recognition_eps_sqrt
-        self.eps_input_shift: float = config.recognition_eps_input_shift
-        self.eps_squared_shift: float = config.recognition_eps_squared_shift
+        self.W_matrix_5d: nn.Parameter = nn.Parameter(
+            torch.randn(1, recognition_config.num_input_caps,
+            recognition_config.num_output_caps,
+            recognition_config.output_caps_dim,
+            recognition_config.input_caps_dim))
 
-    def forward(self, x):
-        batch_size = x.size(0)
-        x = torch.stack([x] * self.num_capsules, dim=2).unsqueeze(4)
+        self.agreement_routing: nn.Module = AgreementRouting(
+            agreement_config, squash_config)
 
-        W = torch.cat([self.W] * batch_size, dim=0)
-        u_hat = torch.matmul(W, x)
+        self.dropout: nn.Module = nn.Dropout(p=recognition_config.dropout_proba)
+        self.use_dropout: bool = recognition_config.use_dropout
 
-        b_ij = Variable(torch.zeros(1, self.num_routes, self.num_capsules, 1))
-        if self.use_cuda:
-            b_ij = b_ij.cuda()
+    def forward(self, input_tensor: TypingFloatTensor) -> TypingFloatTensor:
+        batch_size: Union[int, torch.int32] = input_tensor.size(0)
+        input_stack: TypingFloatTensor = torch.stack(
+            [input_tensor] * self.num_output_caps, dim=2).unsqueeze(4)
 
-        num_iterations: int = self.num_routing_iterations
-        for iteration in range(num_iterations):
-            c_ij = F.softmax(b_ij)
-            c_ij = torch.cat([c_ij] * batch_size, dim=0).unsqueeze(4)
-
-            s_j = (c_ij * u_hat).sum(dim=1, keepdim=True)
-            v_j = self.squash(s_j)
-
-            if iteration < num_iterations - 1:
-                a_ij = torch.matmul(u_hat.transpose(3, 4), torch.cat([v_j] * self.num_routes, dim=1))
-                b_ij = b_ij + a_ij.squeeze(4).mean(dim=0, keepdim=True)
-
-        return v_j.squeeze(1)
-
-    def squash(self, input_tensor):
-        input_tensor = input_tensor + self.eps_input_shift
-        squared_norm = (input_tensor ** 2).sum(-1, keepdim=True) + self.eps_squared_shift
-        output_tensor = squared_norm * input_tensor / (
-                    self.eps_denom + (1. + squared_norm) * torch.sqrt(squared_norm + self.eps_sqrt))
-        return output_tensor
+        W_batch_5d: TypingFloatTensor = torch.cat([self.W_matrix_5d] * batch_size, dim=0)
+        if self.use_dropout:
+            W_batch_5d = self.dropout(W_batch_5d)
+        u_hat_5d: TypingFloatTensor = torch.matmul(W_batch_5d, input_stack)
+        return self.agreement_routing(u_hat_5d).view(
+            batch_size, self.num_output_caps, self.output_caps_dim, 1)
 
 
-class Decoder(nn.Module):
-    def __init__(self, config: SetupConfig) -> None:
-        super(Decoder, self).__init__()
-        modules = [nn.Linear(config.decoder_input_dimension, config.decoder_hidden_layers[0])]
+class ReconstructionNet(nn.Module):
+    def __init__(self, config: ConfigReconstruction) -> None:
+        super(ReconstructionNet, self).__init__()
+
+        modules: List[nn.Module] = [
+            nn.Linear(config.linear_input_dim, config.linear_hidden_layers[0])]
         idx: int
-        for idx in range(len(config.decoder_hidden_layers)):
+        for idx in range(len(config.linear_hidden_layers)):
             modules.append(nn.ReLU(inplace=True))
-            if idx + 1 != len(config.decoder_hidden_layers):
-                modules.append(nn.Linear(config.decoder_hidden_layers[idx],
-                          config.decoder_hidden_layers[idx + 1]))
+            if idx + 1 != len(config.linear_hidden_layers):
+                modules.append(nn.Linear(config.linear_hidden_layers[idx],
+                                         config.linear_hidden_layers[idx + 1]))
             else:
-                modules.append(nn.Linear(config.decoder_hidden_layers[idx],
-                                         config.decoder_output_size))
+                modules.append(nn.Linear(config.linear_hidden_layers[idx],
+                                         config.linear_output_dim))
         modules.append(nn.Sigmoid())
-        self.reconstruction_layers = nn.Sequential(*modules)
-        self.use_cuda = config.use_cuda
-        self.num_output_channels = config.decoder_num_channels
-        self.output_image_size = config.decoder_image_size
-        self.num_classes = config.decoder_n_classes
+        self.reconstruction_layers: nn.Module = nn.Sequential(*modules)
 
-    def forward(self, x):
-        classes = torch.sqrt((x ** 2).sum(2))
-        classes = F.softmax(classes)
+        self.use_cuda: bool = config.use_cuda
+        self.num_output_channels: int = config.output_n_channels
+        self.output_image_size: Tuple[int, int] = config.output_img_size
+        self.num_classes: int = config.num_classes
 
-        _, max_length_indices = classes.max(dim=1)
-        masked = Variable(torch.sparse.torch.eye(self.num_classes))
+    def forward(self, input_tensor: TypingFloatTensor
+                ) -> Tuple[TypingFloatTensor, TypingFloatTensor]:
+        batch_size: Union[int, torch.int32] = input_tensor.size(0)
+        logit_classes: TypingFloatTensor = torch.sqrt((input_tensor ** 2).sum(2))
+        proba_classes: TypingFloatTensor = F.softmax(logit_classes, dim=1)
+
+        max_length_indices_2d: TypingIntTensor
+        _, max_length_indices_2d = proba_classes.max(dim=1)
+        assert len(max_length_indices_2d.shape) == 2, f"{max_length_indices_2d.shape}"
+
+        class_mask_2d: TypingFloatTensor = torch.sparse.torch.eye(self.num_classes)
+        assert len(class_mask_2d.shape) == 2, f"{class_mask_2d.shape}"
+
         if self.use_cuda:
-            masked = masked.cuda()
-        masked = masked.index_select(dim=0, index=max_length_indices.squeeze(1).data)
+            class_mask_2d: TypingFloatTensor = class_mask_2d.cuda()
+        selection_mask_2d: TypingFloatTensor = class_mask_2d.index_select(
+            dim=0, index=max_length_indices_2d.squeeze(1).data)
+        assert len(selection_mask_2d.shape) == 2, f"{selection_mask_2d.shape}"
 
-        reconstructions = self.reconstruction_layers(
-            (x * masked[:, :, None, None]).view(x.size(0), -1))
-        reconstructions = reconstructions.view(-1, self.num_output_channels,
-                                               self.output_image_size[0], self.output_image_size[1])
-        return reconstructions, masked
+        reconstructions_2d: TypingFloatTensor = self.reconstruction_layers(
+            (input_tensor * selection_mask_2d[:, :, None, None]).view(batch_size, -1))
+        reconstructions_4d: TypingFloatTensor = reconstructions_2d.view(
+            batch_size, self.num_output_channels,
+            self.output_image_size[0], self.output_image_size[1])
 
+        return reconstructions_4d, selection_mask_2d

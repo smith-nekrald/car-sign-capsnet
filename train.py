@@ -11,6 +11,7 @@ import numpy as np
 import torch
 import torchvision
 import torch.nn as nn
+import torch.backends
 from torch.autograd import Variable
 from torch.optim import Adam
 from torch.optim import Optimizer
@@ -52,7 +53,7 @@ def train_epoch(epoch_idx, n_epochs, benchmark, capsule_net, optimizer,
         loss.backward()
         optimizer.step()
 
-        train_loss += loss.data.item()
+        train_loss += loss.data.item() * data.shape[0]
 
         batch_match_count = sum(np.argmax(masked.data.cpu().numpy(), 1)
                                 == np.argmax(target.data.cpu().numpy(), 1))
@@ -76,7 +77,7 @@ def train_epoch(epoch_idx, n_epochs, benchmark, capsule_net, optimizer,
         if batch_id % 100 == 0:
             logging.info(f"Train batch accuracy: {batch_match_count/ float(data.shape[0])}")
 
-    avg_train_loss: float = train_loss / len(benchmark.train_loader)
+    avg_train_loss: float = train_loss / sample_count
     train_accuracy: float = accuracy_match_count / sample_count
     logging.info(f"Average Train Loss: {avg_train_loss}.")
     logging.info(f"Train Accuracy: {train_accuracy}.")
@@ -110,7 +111,7 @@ def eval_epoch(epoch_idx, n_epochs, benchmark, capsule_net, optimizer,
         output, reconstructions, masked, class_probas = capsule_net(data)
         loss = capsule_net.loss(data, output, target, reconstructions)
 
-        test_loss += loss.data.item()
+        test_loss += loss.data.item() * data.shape[0]
 
         batch_match_count: int = sum(np.argmax(masked.data.cpu().numpy(), 1) == np.argmax(target.data.cpu().numpy(), 1))
         accuracy_match_count += batch_match_count
@@ -119,7 +120,7 @@ def eval_epoch(epoch_idx, n_epochs, benchmark, capsule_net, optimizer,
         if batch_id % 100 == 0:
             logging.info(f"Test batch accuracy: {batch_match_count/ float(data.shape[0])}")
 
-    avg_test_loss: float = test_loss / len(benchmark.test_loader)
+    avg_test_loss: float = test_loss / sample_count
     test_accuracy: float = accuracy_match_count / sample_count
 
     logging.info(f"Average Test Loss: {avg_test_loss}")
@@ -137,7 +138,7 @@ def save_checkpoint(checkpoint_path: str, epoch: int, model: nn.Module,
                     train_loss: float, train_accuracy: float,
                     test_loss: float, test_accuracy: float) -> None:
     torch.save({
-        'epoch': epoch,
+        'epoch': epoch + 1,
         'model_state_dict': model.state_dict(),
         'optimizer_state_dict': optimizer.state_dict(),
         'train_loss': train_loss,
@@ -145,7 +146,7 @@ def save_checkpoint(checkpoint_path: str, epoch: int, model: nn.Module,
         'test_loss': test_loss,
         'test_accuracy': test_accuracy
     }, checkpoint_path)
-    logging.info(f"Saved checkpoint for epoch {epoch}.")
+    logging.info(f"Saved checkpoint for epoch {epoch + 1}.")
 
 
 def load_checkpoint(checkpoint_path: str, model: nn.Module, optimizer: Optimizer, use_cuda: bool) -> int:
@@ -172,11 +173,17 @@ def load_checkpoint(checkpoint_path: str, model: nn.Module, optimizer: Optimizer
     return epoch_idx
 
 
-def do_training(config: SetupConfig) -> Tuple[float, int]:
+def do_training(setup_config: SetupConfig) -> Tuple[float, int]:
+    benchmark_config = setup_config.benchmark_config
+    config = setup_config.training_config
     logging.info("Started training.")
-    torch.autograd.set_detect_anomaly(True)
+    if config.debug_mode:
+        torch.autograd.set_detect_anomaly(True)
+    else:
+        if config.use_cuda:
+            torch.backends.cudnn.benchmark = True
 
-    capsule_net: nn.Module = CapsNet(config)
+    capsule_net: nn.Module = CapsNet(setup_config.network_config)
     logging.info("Network is built.")
 
     use_cuda: bool = config.use_cuda
@@ -193,7 +200,7 @@ def do_training(config: SetupConfig) -> Tuple[float, int]:
                                           capsule_net, optimizer, use_cuda)
         logging.info("Loaded checkpoint.")
 
-    benchmark = build_benchmark(config)
+    benchmark = build_benchmark(benchmark_config)
     logging.info("Benchmark is built.")
 
     n_epochs = config.n_epochs
@@ -204,8 +211,8 @@ def do_training(config: SetupConfig) -> Tuple[float, int]:
     reconstructions = None
 
     writer: SummaryWriter = SummaryWriter(
-        "traindir/" + config.benchmark,
-        filename_suffix="_" + config.benchmark, flush_secs=60)
+        "traindir/" + benchmark_config.benchmark,
+        filename_suffix="_" + benchmark_config.benchmark, flush_secs=60)
     images, labels = next(iter(benchmark.train_loader))
     writer.add_graph(capsule_net, images.cuda())
 
@@ -225,9 +232,13 @@ def do_training(config: SetupConfig) -> Tuple[float, int]:
         if use_cuda:
             torch.cuda.empty_cache()
 
-        data, reconstructions, test_loss, test_accuracy = eval_epoch(
-            epoch_idx, n_epochs, benchmark, capsule_net,
-            optimizer, use_cuda, n_classes, writer)
+        with torch.no_grad():
+            if epoch_idx + 1 == n_epochs:
+                benchmark.reset_test_loader(config.batch_size, True)
+
+            data, reconstructions, test_loss, test_accuracy = eval_epoch(
+                epoch_idx, n_epochs, benchmark, capsule_net,
+                optimizer, use_cuda, n_classes, writer)
         if test_accuracy > best_test_accuracy:
             best_test_accuracy = test_accuracy
             epoch_on_best_test = epoch_idx
@@ -237,13 +248,13 @@ def do_training(config: SetupConfig) -> Tuple[float, int]:
             if not os.path.isdir(config.checkpoint_root):
                 os.makedirs(config.checkpoint_root)
             save_path: str = os.path.join(config.checkpoint_root,
-                config.checkpoint_template.format(epoch_idx))
+                config.checkpoint_template.format(benchmark_config.benchmark, epoch_idx + 1))
             save_checkpoint(save_path, epoch_idx, capsule_net, optimizer,
                     train_loss, train_accuracy, test_loss, test_accuracy)
 
     writer.close()
     logging.info("Visualizations.")
-    explanations_path = 'traindir/explanations_' + config.benchmark
+    explanations_path = 'traindir/explanations_' + benchmark_config.benchmark
     check_and_make_folder(explanations_path)
     plot_images_separately(data[:6, 0].data.cpu().numpy(),
                            os.path.join(explanations_path, 'source.png'))
@@ -252,7 +263,7 @@ def do_training(config: SetupConfig) -> Tuple[float, int]:
     logging.info("Finished training.")
     del data, reconstructions
     explain_lime(benchmark, capsule_net, config.use_cuda,
-                 'traindir/explanations_' + config.benchmark)
+                 'traindir/explanations_' + benchmark_config.benchmark)
 
     return best_test_accuracy, epoch_on_best_test
 

@@ -41,6 +41,19 @@ class DynamicDataset(Dataset, ABC):
         self.root_dir: str = root_dir
         self.annotations_path: str = annotations_path
 
+        self.existence_tweak()
+
+    def existence_tweak(self):
+        verified_idx2class: List[int] = list()
+        verified_idx2name: List[str] = list()
+        for class_id, relative_path in zip(self.idx2class, self.idx2name):
+            image_path: str = os.path.join(self.root_dir, relative_path)
+            if os.path.exists(image_path):
+                verified_idx2class.append(class_id)
+                verified_idx2name.append(relative_path)
+        self.idx2class = verified_idx2class
+        self.idx2name = verified_idx2name
+
     def static_mode(self):
         self.transform = self.static_transform
 

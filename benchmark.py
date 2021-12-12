@@ -1,8 +1,6 @@
 from typing import List
 from typing import Optional
-from typing import Tuple
 from typing import Type
-from typing import Union
 
 import numpy as np
 
@@ -13,7 +11,7 @@ from dataset import ChineseDataset
 from dataset import GermanDataset
 from dataset import TransformType
 from dataset import DynamicDataset
-from config import SetupConfig
+from config import ConfigBenchmark
 from keys import ColorSchema
 from keys import BenchmarkName
 from keys import FileFolderPaths
@@ -21,7 +19,7 @@ from estimate import estimate_normalization
 
 
 class IBenchmark:
-    def __init__(self, config: SetupConfig) -> None:
+    def __init__(self, config: ConfigBenchmark) -> None:
         static_list: List[TransformType] = list()
         random_list: List[TransformType] = list()
 
@@ -75,6 +73,9 @@ class IBenchmark:
         self.train_loader: Optional[DataLoader] = None
         self.test_loader: Optional[DataLoader] = None
 
+        self.use_cuda = config.use_cuda
+        self.num_workers = config.num_load_workers
+
     def set_random_mode(self) -> None:
         if self.train_dataset is not None:
             self.train_dataset.random_mode()
@@ -83,31 +84,32 @@ class IBenchmark:
         if self.train_dataset is not None:
             self.train_dataset.static_mode()
 
-    def init_loaders(self, config: SetupConfig) -> None:
+    def init_loaders(self, config: ConfigBenchmark) -> None:
         self.train_dataset.random_mode()
         self.test_dataset.static_mode()
 
         self.reset_train_loader(config.batch_size)
-        self.reset_test_loader(config.batch_size)
+        self.reset_test_loader(config.batch_size, False)
 
         self.n_classes: int = self.train_dataset.n_classes
         assert (self.test_dataset.n_classes == self.train_dataset.n_classes)
 
-    def reset_test_loader(self, batch_size: int) -> None:
+    def reset_test_loader(self, batch_size: int, shuffle_switch: bool) -> None:
         if self.test_loader is not None:
             del self.test_loader
         self.test_loader = DataLoader(
-            self.test_dataset, batch_size=batch_size, shuffle=False)
+            self.test_dataset, batch_size=batch_size, shuffle=shuffle_switch,
+            pin_memory=self.use_cuda, num_workers=self.num_workers)
 
     def reset_train_loader(self, batch_size: int) -> None:
         if self.train_loader is not None:
             del self.train_loader
         self.train_loader = DataLoader(
-            self.train_dataset, batch_size=batch_size, shuffle=True)
+            self.train_dataset, batch_size=batch_size,
+            shuffle=True, pin_memory=self.use_cuda, num_workers=self.num_workers)
 
 
-
-def build_benchmark(config: SetupConfig) -> IBenchmark:
+def build_benchmark(config: ConfigBenchmark) -> IBenchmark:
     DataSetTypeClass: Optional[Type[DynamicDataset]] = None
     BenchmarkTypeClass: Optional[Type[IBenchmark]] = None
     path_to_img_root: Optional[str] = None
@@ -141,7 +143,7 @@ def build_benchmark(config: SetupConfig) -> IBenchmark:
 
 
 class ChineseTraffic(IBenchmark):
-    def __init__(self, config: SetupConfig) -> None:
+    def __init__(self, config: ConfigBenchmark) -> None:
         super().__init__(config)
 
         self.train_dataset: ChineseDataset = ChineseDataset(
@@ -159,7 +161,7 @@ class ChineseTraffic(IBenchmark):
 
 
 class GermanTraffic(IBenchmark):
-    def __init__(self, config: SetupConfig) -> None:
+    def __init__(self, config: ConfigBenchmark) -> None:
         super().__init__(config)
         self.train_dataset: GermanDataset = GermanDataset(
             path_to_img_dir=FileFolderPaths.GERMAN_TRAIN_ROOT,

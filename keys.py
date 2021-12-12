@@ -25,3 +25,8 @@ class FileFolderPaths:
 class TableColumns:
     GERMAN_CLASS_COLUMN: str = 'ClassId'
     GERMAN_PATH_COLUMN: str = 'Path'
+
+
+class Constants:
+    MEAN_CHINESE_GRAYSCALE = 0.4255
+    STD_CHINESE_GRAYSCALE = 0.2235
