@@ -34,7 +34,7 @@ Rename the project directory such that all python
 files are located in `project_root/capsnet`.
 2. Download benchmarks from  
 https://drive.google.com/file/d/10Nl3ucj1b4u8H-yvl3JNTIBWLtiVN2Eu/view?usp=sharing
-Unpack the contents in the folder `project_root`. 
+3. Unpack the contents in the folder `project_root`. 
 The archived folder `benchmarks` should come right into
 the directory `project_root`. I.e. the folder tree should look 
 `project_root/benchmarks/{belgium-TSC,china-TSRD,german-GTRSD,rtsd-r1}`.
