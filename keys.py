@@ -1,3 +1,6 @@
+from typing import Optional
+
+
 class ColorSchema:
     GRAYSCALE: str = 'grayscale'
     RGB: str = 'rgb'
@@ -13,8 +16,8 @@ class BenchmarkName:
 class NameKeys:
     BEST_CHECKPOINT: str = 'best'
     TRAINDIR: str = 'traindir'
-    EXPLANATIONS: str = 'explanations_{}'
-    VISUALIZATIONS: str = 'visualizations_{}'
+    EXPLANATIONS: str = 'explanations/{}'
+    VISUALIZATIONS: str = 'visualizations/{}'
     TRAIN_MODE_STRING: str = 'train'
     TEST_MODE_STRING: str = 'test'
     SOURCE_PNG: str = 'source.png'
@@ -39,9 +42,9 @@ class FileFolderPaths:
     GERMAN_TEST_ANNOTATIONS: str = '../benchmarks/german-GTRSD/Test.csv'
 
     BELGIUM_TRAIN_ROOT: str = '../benchmarks/belgium-TSC/BelgiumTSC_Training/Training'
-    BELGIUM_TRAIN_ANNOTATIONS: str = None
+    BELGIUM_TRAIN_ANNOTATIONS: Optional[str] = None
     BELGIUM_TEST_ROOT: str = '../benchmarks/belgium-TSC/BelgiumTSC_Training/Training'
-    BELGIUM_TEST_ANNOTATIONS: str = None
+    BELGIUM_TEST_ANNOTATIONS: Optional[str] = None
 
     RUSSIAN_TRAIN_ROOT: str = '../benchmarks/rtsd-r1/train/'
     RUSSIAN_TRAIN_ANNOTATIONS: str = '../benchmarks/rtsd-r1/gt_train.csv'
@@ -57,9 +60,12 @@ class TableColumns:
 
 
 class StatsTableKeys:
-    DATASET: str = 'benchmark'
-    ACCURACY: str = 'accuracy'
-    EPOCH: str = 'epoch'
+    DATASET: str = 'Benchmark'
+    EPOCH_ID: str = 'Epoch Id'
+    TEST_ACCURACY: str = 'Test Accuracy'
+    TRAIN_ACCURACY: str = 'Train Accuracy'
+    TEST_LOSS: str = 'Test Loss'
+    TRAIN_LOSS: str = 'Train Loss'
 
 
 class Constants:

@@ -25,29 +25,45 @@ from keys import StatsTableKeys
 from keys import NameKeys
 
 
-def fill_stats(json_stats: Dict[str, Any], table_stats: Dict[str, Any],
-               benchmark_name: str, accuracy: float, epoch: int) -> None:
+def fill_stats(json_stats: Dict[str, Any], table_stats: Dict[str, Any], epoch_id: int,
+               test_accuracy: float, test_loss: float,
+               train_accuracy: float, train_loss: float,
+               benchmark_name: str) -> None:
     benchmark_stats: Dict[str, Any] = dict()
     json_stats[benchmark_name] = benchmark_stats
     table_stats[StatsTableKeys.DATASET].append(benchmark_name)
-    benchmark_stats[StatsTableKeys.ACCURACY] = accuracy
-    table_stats[StatsTableKeys.ACCURACY].append(accuracy)
-    benchmark_stats[StatsTableKeys.EPOCH] = epoch
-    table_stats[StatsTableKeys.EPOCH].append(epoch)
+    benchmark_stats[StatsTableKeys.TEST_ACCURACY] = test_accuracy * 100.
+    table_stats[StatsTableKeys.TEST_ACCURACY].append(test_accuracy * 100.)
+    benchmark_stats[StatsTableKeys.TRAIN_ACCURACY] = train_accuracy * 100.
+    table_stats[StatsTableKeys.TRAIN_ACCURACY].append(train_accuracy * 100.)
+    benchmark_stats[StatsTableKeys.TEST_LOSS] = test_loss
+    table_stats[StatsTableKeys.TEST_LOSS].append(test_loss)
+    benchmark_stats[StatsTableKeys.TRAIN_LOSS] = train_loss
+    table_stats[StatsTableKeys.TRAIN_LOSS].append(train_loss)
+    benchmark_stats[StatsTableKeys.EPOCH_ID] = epoch_id
+    table_stats[StatsTableKeys.EPOCH_ID].append(epoch_id)
 
 
 def perform_test_launches(json_stats: Dict[str, Any],
                           table_stats: Dict[str, Any]) -> None:
     logging.info("Test launch.")
     config: SetupConfig = SetupConfig()
-    config.training_config.n_epochs = 2
-    config.training_config.batch_size = 4
-    config.training_config.n_visualize = 4
-    config.benchmark_config.batch_size = 4
-    accuracy: float; epoch: int
-    accuracy, epoch = do_training(config)
-    fill_stats(json_stats, table_stats,
-               'test-benchmark', accuracy, epoch)
+    config.training_config.n_epochs = 1
+    config.training_config.batch_size = 16
+    config.training_config.n_visualize = 6
+    config.training_config.use_lime = False
+    config.benchmark_config.batch_size = 16
+
+    epoch_id: int
+    test_accuracy: float; test_loss: float
+    train_accuracy: float; train_loss: float
+    (epoch_id, test_accuracy, test_loss,
+     train_accuracy, train_loss) = do_training(config)
+    fill_stats(json_stats, table_stats, epoch_id,
+               test_accuracy, test_loss,
+               train_accuracy, train_loss,
+               'Test Benchmark')
+
     logging.info("Finished test launch.")
 
 
@@ -55,11 +71,21 @@ def perform_chinese_launches(json_stats: Dict[str, Any],
                              table_stats: Dict[str, Any]) -> None:
     logging.info("Performing Chinese Launches.")
     config: SetupConfig = SetupConfig()
-    config.training_config.n_epochs = 60
-    accuracy: float; epoch: int
-    accuracy, epoch = do_training(config)
-    fill_stats(json_stats, table_stats,
-               BenchmarkName.CHINESE, accuracy, epoch)
+    config.training_config.n_epochs = 100
+    config.benchmark_config.augment_proba = 0.6
+    config.network_config.primary_config.dropout_proba = 0.5
+    config.network_config.recognition_config.dropout_proba = 0.5
+
+    epoch_id: int
+    test_accuracy: float; test_loss: float
+    train_accuracy: float; train_loss: float
+    (epoch_id, test_accuracy, test_loss,
+     train_accuracy, train_loss) = do_training(config)
+    fill_stats(json_stats, table_stats, epoch_id,
+               test_accuracy, test_loss,
+               train_accuracy, train_loss,
+               BenchmarkName.CHINESE)
+
     logging.info("Done with Chinese Launches.")
 
 
@@ -75,6 +101,7 @@ def perform_german_launches(json_stats: Dict[str, Any],
     training_config: ConfigTraining = config.training_config
     benchmark_config: ConfigBenchmark = config.benchmark_config
     conv_config: ConfigConv = config.network_config.conv_config
+    squash_config: ConfigSquash = config.network_config.squash_config
 
     benchmark_config.benchmark = BenchmarkName.GERMANY
     training_config.n_classes = 43
@@ -82,18 +109,27 @@ def perform_german_launches(json_stats: Dict[str, Any],
     benchmark_config.estimate_normalization = True
     benchmark_config.mean_normalize = None
     benchmark_config.std_normalize = None
-    conv_config.use_batch_norm = False
+    conv_config.use_batch_norm = True
     primary_config.use_dropout = False
     agreement_config.num_output_caps = 43
     recognition_config.num_output_caps = 43
     recognition_config.use_dropout = False
     reconstruction_config.linear_input_dim = 43 * 16
     reconstruction_config.num_classes = 43
+    squash_config.eps_norm = 1e-4
+    squash_config.eps_sqrt = 1e-4
+    squash_config.eps_denom = 1e-4
+    squash_config.eps_input = 1e-4
 
-    accuracy: float; epoch: int
-    accuracy, epoch = do_training(config)
-    fill_stats(json_stats, table_stats,
-               BenchmarkName.GERMANY, accuracy, epoch)
+    epoch_id: int
+    test_accuracy: float; test_loss: float
+    train_accuracy: float; train_loss: float
+    (epoch_id, test_accuracy, test_loss,
+     train_accuracy, train_loss) = do_training(config)
+    fill_stats(json_stats, table_stats, epoch_id,
+               test_accuracy, test_loss,
+               train_accuracy, train_loss,
+               BenchmarkName.GERMANY)
     logging.info("Done with German Launches.")
 
 
@@ -124,10 +160,16 @@ def perform_belgium_launches(json_stats: Dict[str, Any],
     reconstruction_config.linear_input_dim = 62 * 16
     reconstruction_config.num_classes = 62
 
-    accuracy: float; epoch: int
-    accuracy, epoch = do_training(config)
-    fill_stats(json_stats, table_stats,
-               BenchmarkName.BELGIUM, accuracy, epoch)
+    epoch_id: int
+    test_accuracy: float; test_loss: float
+    train_accuracy: float; train_loss: float
+    (epoch_id, test_accuracy, test_loss,
+     train_accuracy, train_loss) = do_training(config)
+    fill_stats(json_stats, table_stats, epoch_id,
+               test_accuracy, test_loss,
+               train_accuracy, train_loss,
+               BenchmarkName.BELGIUM)
+
     logging.info("Done with Belgium Launches.")
 
 
@@ -167,22 +209,20 @@ def perform_russian_launches(json_stats: Dict[str, Any],
     reconstruction_config.linear_input_dim = 67 * 16
     reconstruction_config.num_classes = 67
 
-    accuracy: float; epoch: int
-    accuracy, epoch = do_training(config)
-    fill_stats(json_stats, table_stats,
-               BenchmarkName.RUSSIAN, accuracy, epoch)
+    epoch_id: int
+    test_accuracy: float; test_loss: float
+    train_accuracy: float; train_loss: float
+    (epoch_id, test_accuracy, test_loss,
+     train_accuracy, train_loss) = do_training(config)
+    fill_stats(json_stats, table_stats, epoch_id,
+               test_accuracy, test_loss,
+               train_accuracy, train_loss,
+               BenchmarkName.RUSSIAN)
+
     logging.info("Done with Russian Launches.")
 
 
-def perform_launches() -> None:
-    json_stats: Dict[str, Any] = OrderedDict()
-    table_stats: Dict[str, List[Any]] = defaultdict(list)
-
-    perform_russian_launches(json_stats, table_stats)
-    perform_chinese_launches(json_stats, table_stats)
-    perform_belgium_launches(json_stats, table_stats)
-    perform_german_launches(json_stats, table_stats)
-
+def output_stats(json_stats, table_stats) -> None:
     file_stats: TextIO
     path_to_stats_json: str = os.path.join(
         NameKeys.TRAINDIR, NameKeys.STATS_JSON)
@@ -196,3 +236,14 @@ def perform_launches() -> None:
         NameKeys.TRAINDIR, NameKeys.STATS_TEX)
     stats_df.to_excel(path_to_stats_xlsx, float_format="%.2f")
     stats_df.to_latex(path_to_stats_tex, float_format="%.2f")
+
+
+def perform_launches() -> None:
+    json_stats: Dict[str, Any] = OrderedDict()
+    table_stats: Dict[str, List[Any]] = defaultdict(list)
+
+    perform_german_launches(json_stats, table_stats)
+    perform_chinese_launches(json_stats, table_stats)
+    perform_russian_launches(json_stats, table_stats)
+    perform_belgium_launches(json_stats, table_stats)
+    output_stats(json_stats, table_stats)

@@ -147,7 +147,7 @@ def eval_epoch(epoch_idx: int, benchmark: IBenchmark, capsule_net: nn.Module,
                          log_frequency, False, None)
 
 
-def do_training(setup_config: SetupConfig) -> Tuple[float, int]:
+def do_training(setup_config: SetupConfig) -> Tuple[int, float, float, float, float]:
     logging.info("Started training.")
 
     benchmark_config: ConfigBenchmark = setup_config.benchmark_config
@@ -185,8 +185,13 @@ def do_training(setup_config: SetupConfig) -> Tuple[float, int]:
         filename_suffix=benchmark_name, flush_secs=60)
 
     data: TypingFloatTensor; reconstructions: TypingFloatTensor
-    best_test_accuracy: float; epoch_on_best_test: int
-    data, reconstructions, best_test_accuracy, epoch_on_best_test = iterate_training(
+    epoch_on_best_test: int
+    best_test_accuracy: float; test_loss_on_best: float
+    train_accuracy_on_best: float; train_loss_on_best: float
+
+    (data, reconstructions, epoch_on_best_test,
+     best_test_accuracy, test_loss_on_best,
+     train_accuracy_on_best, train_loss_on_best) = iterate_training(
         start_epoch_idx, training_config.n_epochs, benchmark, capsule_net,
         optimizer, use_cuda, training_config.n_classes, writer, training_config,
         benchmark_name)
@@ -226,7 +231,9 @@ def do_training(setup_config: SetupConfig) -> Tuple[float, int]:
         logging.info("Finished explanations.")
 
     logging.info("Finished training.")
-    return best_test_accuracy, epoch_on_best_test
+    return (epoch_on_best_test,
+            best_test_accuracy, test_loss_on_best,
+            train_accuracy_on_best, train_loss_on_best)
 
 
 def cuda_cache_reset(use_cuda: bool) -> None:
@@ -236,35 +243,45 @@ def cuda_cache_reset(use_cuda: bool) -> None:
 
 
 def dump_checkpoint(training_config: ConfigTraining, benchmark_name: str,
-                    checkpoint_id: str, epoch_idx: int, capsule_net: nn.Module,
-                    optimizer: Optimizer, test_loss: float, test_accuracy: float) -> None:
+                    checkpoint_id: str, epoch_idx: int,
+                    capsule_net: nn.Module, optimizer: Optimizer,
+                    test_loss: float, test_accuracy: float,
+                    train_loss: float, train_accuracy: float) -> None:
     if not training_config.dump_checkpoints:
         return
     if not os.path.isdir(training_config.checkpoint_root):
         os.makedirs(training_config.checkpoint_root)
-    save_path: str = os.path.join(training_config.checkpoint_root,
-                                  training_config.checkpoint_template.format(
-                                      benchmark_name, checkpoint_id))
+    save_path: str = os.path.join(
+        training_config.checkpoint_root,
+        training_config.checkpoint_template.format(
+            benchmark_name, checkpoint_id))
     save_checkpoint(save_path, epoch_idx, capsule_net, optimizer,
-                    test_loss, test_accuracy)
+                    test_loss, test_accuracy, train_loss, train_accuracy)
 
 
 def iterate_training(start_epoch_idx: int, n_epochs: int, benchmark: IBenchmark,
                      capsule_net: nn.Module, optimizer: Optimizer, use_cuda: bool,
                      n_classes: int, writer: SummaryWriter,
                      training_config: ConfigTraining, benchmark_name: str
-                     ) -> Tuple[TypingFloatTensor, TypingFloatTensor, float, int]:
+                     ) -> Tuple[TypingFloatTensor, TypingFloatTensor,
+                                int, float, float, float, float]:
     logging.info("Started training iterations.")
     best_test_accuracy: float = 0.
     epoch_on_best_test: int = -1
+    test_loss_on_best_test: float = 0.
+    train_loss_on_best_test: float = 0.
+    train_accuracy_on_best_test: float = 0.
+
     data: TypingFloatTensor; reconstructions: TypingFloatTensor
     data, reconstructions = None, None
     epoch_idx: int
+    train_loss: float; train_accuracy: float
+    test_loss: float; test_accuracy: float
     for epoch_idx in range(start_epoch_idx, n_epochs):
         logging.info(f"Epoch {epoch_idx + 1} out of {n_epochs}.")
         del data, reconstructions
         cuda_cache_reset(use_cuda)
-        train_epoch(epoch_idx, benchmark, capsule_net,
+        train_loss, train_accuracy = train_epoch(epoch_idx, benchmark, capsule_net,
             optimizer, use_cuda, n_classes, writer,
             training_config.log_frequency, training_config.use_clipping,
             training_config.clipping_threshold)
@@ -279,12 +296,19 @@ def iterate_training(start_epoch_idx: int, n_epochs: int, benchmark: IBenchmark,
             if test_accuracy > best_test_accuracy:
                 best_test_accuracy = test_accuracy
                 epoch_on_best_test = epoch_idx
+                test_loss_on_best_test = test_loss
+                train_loss_on_best_test = train_loss
+                train_accuracy_on_best_test = train_accuracy
                 dump_checkpoint(training_config, benchmark_name, NameKeys.BEST_CHECKPOINT,
-                                epoch_idx, capsule_net, optimizer, test_loss, test_accuracy)
+                                epoch_idx, capsule_net, optimizer, test_loss, test_accuracy,
+                                train_loss, train_accuracy)
 
         if epoch_idx % training_config.checkpoint_frequency == 1 or epoch_idx + 1 == n_epochs:
             dump_checkpoint(training_config, benchmark_name, f"{epoch_idx + 1}",
-                epoch_idx, capsule_net, optimizer, test_loss, test_accuracy)
+                epoch_idx, capsule_net, optimizer, test_loss,
+                test_accuracy, train_loss, train_accuracy)
     writer.close()
     logging.info("Finished training iterations.")
-    return data, reconstructions, best_test_accuracy, epoch_on_best_test
+    return (data, reconstructions, epoch_on_best_test,
+            best_test_accuracy, test_loss_on_best_test,
+            train_accuracy_on_best_test, train_loss_on_best_test)

@@ -153,10 +153,6 @@ class AgreementRouting(nn.Module):
         num_output_caps: Union[int, torch.int32]; output_caps_dim: Union[int, torch.int32]
         batch_size, num_input_caps, num_output_caps, output_caps_dim = u_ji_predict_4d.size()
 
-        assert self.num_input_caps == num_input_caps, f"{self.num_input_caps} != {num_input_caps}"
-        assert self.num_output_caps == num_output_caps, f"{self.num_output_caps} != {num_output_caps}"
-        assert self.output_caps_dim == output_caps_dim, f"{self.output_caps_dim} != {output_caps_dim}"
-
         b_ij_batch_3d: TypingFloatTensor = torch.zeros(
             batch_size, num_input_caps, num_output_caps)
         if self.use_cuda:
