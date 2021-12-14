@@ -46,6 +46,4 @@ calling `tensorboard --logdir=./traindir`
 from `project_root/capsnet`. Execution summary
 is available at `project_root/capsnet/traindir/stats.json`.
 
-Reference traindir is available at: 
-https://drive.google.com/file/d/123IGYlhpwvchJxhYOKadNLh5_JDC1L2V/view?usp=sharing
 
