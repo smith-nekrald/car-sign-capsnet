@@ -1,3 +1,13 @@
+""" Implements Benchmarks and related API. 
+Benchmark is designed to process all job
+related to loading and transforming images. 
+"""
+
+# Author: Aliaksandr Nekrashevich
+# Email: aliaksandr.nekrashevich@queensu.ca
+# (c) Smith School of Business, 2021
+# (c) Smith School of Business, 2023
+
 from typing import List
 from typing import Optional
 from typing import Type
@@ -25,7 +35,27 @@ TypingFloatTensor = Union[torch.FloatTensor, torch.cuda.FloatTensor]
 
 
 class IBenchmark:
+    """ Benchmark Interface. Benchmark is designed to process all job 
+    related to loading and transforming images.  
+    
+    Attributes:
+        normalize_transform: Normalization transformation. Standard scaling for images.
+        recover_normalize: Inverse transformatino to normalize_transform.
+        static_transform: Static transform version. Used at evaluation.
+        random_transform: Random transform version. Used at training.
+        train_dataset: The train dataset, benchmark-specific DynamicDataset for training part.
+        test_dataset: The test dataset, benchmark-specific DynamicDataset for testing part.
+        train_loader: Loader for training part.
+        test_loader: Loader for testing part.
+        use_cuda: Whether to use CUDA.
+        num_workers: Number of parallel workers in loaders.
+    """
     def __init__(self, config: ConfigBenchmark) -> None:
+        """ Initializer method. Prepares static and random transformations.
+        
+        Args:
+            config: Benchmark configuration.
+        """
         static_list: List[TransformType] = list()
         random_list: List[TransformType] = list()
 
@@ -83,14 +113,22 @@ class IBenchmark:
         self.num_workers: int = config.num_load_workers
 
     def set_random_mode(self) -> None:
+        """ Sets train dataset to random transformation mode. """
         if self.train_dataset is not None:
             self.train_dataset.random_mode()
 
     def set_static_mode(self) -> None:
+        """ Sets train dataset to static transformation mode. """
         if self.train_dataset is not None:
             self.train_dataset.static_mode()
 
     def init_loaders(self, config: ConfigBenchmark) -> None:
+        """ Loader initialization. Sets train dataset to random mode, test dataset
+        to static mode, and calls loader-specific methods.
+
+        Args:
+            config: Benchmark configuration.
+        """
         self.train_dataset.random_mode()
         self.test_dataset.static_mode()
 
@@ -101,6 +139,12 @@ class IBenchmark:
         assert (self.test_dataset.n_classes == self.train_dataset.n_classes)
 
     def reset_test_loader(self, batch_size: int, shuffle_switch: bool) -> None:
+        """ Resets/Initializes test data loader. 
+
+        Args:
+            batch_size: The size of batch.
+            shuffle_switch: Whether to shuffle the data.
+        """
         if self.test_loader is not None:
             del self.test_loader
         self.test_loader = DataLoader(
@@ -108,6 +152,11 @@ class IBenchmark:
             pin_memory=self.use_cuda, num_workers=self.num_workers)
 
     def reset_train_loader(self, batch_size: int) -> None:
+        """ Resets/Initializes train data loader. 
+
+        Args:
+            batch_size: The size of batch.
+        """
         if self.train_loader is not None:
             del self.train_loader
         self.train_loader = DataLoader(
@@ -116,6 +165,16 @@ class IBenchmark:
 
 
 def build_benchmark(config: ConfigBenchmark) -> IBenchmark:
+    """ Benchmark builder method.  Creates corresponding benchmark according to 
+    benchmark configuration. If needed, estimates normalization parameters before
+    creating benchmark.
+
+    Args:
+        config: Benchmark configuration.
+
+    Returns:
+        Ready-to-use benchmark supporting IBenchmark interface.
+    """
     DataSetTypeClass: Optional[Type[DynamicDataset]] = None
     BenchmarkTypeClass: Optional[Type[IBenchmark]] = None
     path_to_img_root: Optional[str] = None
@@ -156,29 +215,45 @@ def build_benchmark(config: ConfigBenchmark) -> IBenchmark:
         )
         config.mean_normalize = mean_normalize.numpy()
         config.std_normalize = std_normalize.numpy()
+
     return BenchmarkTypeClass(config)
 
 
 class ChineseTraffic(IBenchmark):
+    """ Chinese Traffic Benchmark.  """
+
     def __init__(self, config: ConfigBenchmark) -> None:
+        """ Initialization method. Sets datasets and initializes loaders. 
+        
+        Args:
+            config: Benchmark configuration.
+        """
         super().__init__(config)
 
         self.train_dataset: ChineseDataset = ChineseDataset(
             path_to_img_dir=FileFolderPaths.CHINESE_TRAIN_ROOT,
             path_to_annotations=FileFolderPaths.CHINESE_TRAIN_ANNOTATIONS,
             static_transform=self.static_transform,
-            random_transform=self.random_transform)
-
+            random_transform=self.random_transform
+        )
         self.test_dataset: ChineseDataset = ChineseDataset(
             path_to_img_dir=FileFolderPaths.CHINESE_TEST_ROOT,
             path_to_annotations=FileFolderPaths.CHINESE_TEST_ANNOTATIONS,
             static_transform=self.static_transform,
-            random_transform=None)
+            random_transform=None
+        )
         self.init_loaders(config)
 
 
 class GermanTraffic(IBenchmark):
+    """ German Traffic Benchmark. """
+
     def __init__(self, config: ConfigBenchmark) -> None:
+        """ Initialization method. Sets datasets and initializes loaders. 
+        
+        Args:
+            config: Benchmark configuration.
+        """
         super().__init__(config)
         self.train_dataset: GermanDataset = GermanDataset(
             path_to_img_dir=FileFolderPaths.GERMAN_TRAIN_ROOT,
@@ -196,7 +271,14 @@ class GermanTraffic(IBenchmark):
 
 
 class BelgiumTraffic(IBenchmark):
+    """ Belgium Traffic Benchmark. """
+
     def __init__(self, config: ConfigBenchmark) -> None:
+        """ Initialization method. Sets datasets and initializes loaders. 
+        
+        Args:
+            config: Benchmark configuration.
+        """
         super().__init__(config)
         self.train_dataset: BelgiumDataset = BelgiumDataset(
             path_to_img_dir=FileFolderPaths.BELGIUM_TRAIN_ROOT,
@@ -214,7 +296,13 @@ class BelgiumTraffic(IBenchmark):
 
 
 class RussianTraffic(IBenchmark):
+    """ Russian Traffic Benchmark. """
     def __init__(self, config: ConfigBenchmark) -> None:
+        """ Initialization method. Sets datasets and initializes loaders. 
+        
+        Args:
+            config: Benchmark configuration.
+        """
         super().__init__(config)
         self.train_dataset: RussianDataset = RussianDataset(
             path_to_img_dir=FileFolderPaths.RUSSIAN_TRAIN_ROOT,
@@ -229,3 +317,4 @@ class RussianTraffic(IBenchmark):
             random_transform=None
         )
         self.init_loaders(config)
+
