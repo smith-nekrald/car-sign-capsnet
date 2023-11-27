@@ -128,7 +128,7 @@ def explain_lime(benchmark: IBenchmark, model: nn.Module,
             explanation.top_labels[0], positive_only=True,
             num_features=10, hide_rest=False, min_weight=0.01)
         plt.imsave(os.path.join(
-            explanation_dir, NameKeys.EXPLAIN_POSITIVE_PNG.format(idx_image)),
+            explanation_dir, NameKeys.EXPLAIN_SUPERPIXELS_PNG.format(idx_image)),
             label2rgb(mask_positive, temp_positive, bg_label=0))
 
         temp_all: np.array; mask_all: np.array
