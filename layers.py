@@ -1,3 +1,10 @@
+""" Implements modules and layers used for building Capsule Network. """
+
+# Author: Aliaksandr Nekrashevich
+# Email: aliaksandr.nekrashevich@queensu.ca
+# (c) Smith School of Business, 2021
+# (c) Smith School of Business, 2023
+
 from typing import Union
 from typing import Optional
 from typing import Tuple
@@ -24,6 +31,15 @@ TypingIntTensor = Union[torch.IntTensor, torch.cuda.IntTensor]
 
 
 def fix_nan_gradient_hook(gradient: TypingFloatTensor) -> Optional[TypingFloatTensor]:
+    """ Replaces nans with zeroes in PyTorch gradient.
+
+    Args:
+        gradient: The gradient tensor to process.
+
+    Returns:
+        None if no NaN values is found in the gradient. Otherwise,
+        returns gradient with NaNs replaced by zeroes.
+    """
     if torch.any(torch.isnan(gradient)):
         logging.info("Fixing NaN gradient.")
         fixed_gradient: TypingFloatTensor = torch.where(
@@ -33,11 +49,24 @@ def fix_nan_gradient_hook(gradient: TypingFloatTensor) -> Optional[TypingFloatTe
 
 
 def nan_gradient_hook_module(module: nn.Module, in_gradient: TypingFloatTensor,
-                      out_gradient: TypingFloatTensor) -> Optional[TypingFloatTensor]:
+                      out_gradient: TypingFloatTensor) -> Optional[List[TypingFloatTensor]]:
+    """ Trick to remove nan values from gradients. The format of the argument is 
+    to support PyTorch API; in reality, only out_gradient is updated. Iterates through
+    all members in out_gradient and applies fix_nan_gradient_hook method.
+
+    Args:
+        module: The relevant module to process.
+        in_gradient: The input gradient of the module to process.
+        out_gradient: The output gradient of the module to process.
+
+    Returns:
+        None if nothing is updated/rewrited. Outherwise, returns list with updated gradients.
+    """
     rewrite_grads: bool = False
-    fixed_list = list()
+    fixed_list: List[TypingFloatTensor] = list()
+    grad_entry: TypingFloatTensor
     for grad_entry in out_gradient:
-        fixed_grad = fix_nan_gradient_hook(grad_entry)
+        fixed_grad: Optional[TypingFloatTensor] = fix_nan_gradient_hook(grad_entry)
         if fixed_grad is not None:
             fixed_list.append(fixed_grad)
             rewrite_grads = True
@@ -48,7 +77,26 @@ def nan_gradient_hook_module(module: nn.Module, in_gradient: TypingFloatTensor,
 
 
 class SquashLayer(nn.Module):
+    """ Implements squashing. The formula from original paper is:
+        v_j = ||s_j||^2 / (1 + ||s_j||^2) * s_j / ||s_j||
+        However, due to numerical stability issues, the applied formula is:
+            v_j = (||s_j + eps_input||^2 + eps_norm) 
+            / (eps_denom + 1 + eps_norm  + ||s_j + eps_input||^2) 
+            * (s_j + eps_input) / sqrt(eps_norm + ||s_j + eps_input||^2 + eps_sqrt)                
+    
+    Attributes:
+        eps_denom: Shift added in denominator for numerical stability.
+        eps_sqrt: Shift added under square root for numerical stability.
+        eps_input: Shift for input tensor added for numerical stability.
+        eps_norm: Shift for squared norm added for numerical stability.
+    """
+
     def __init__(self, config: ConfigSquash) -> None:
+        """ Initializer method. 
+
+        Args:
+            config: Configuration for the squash layers. Specifies attributes.
+        """
         super(SquashLayer, self).__init__()
         self.eps_denom: float = config.eps_denom
         self.eps_sqrt: float = config.eps_sqrt
@@ -56,6 +104,14 @@ class SquashLayer(nn.Module):
         self.eps_norm: float = config.eps_norm
 
     def forward(self, input_tensor: TypingFloatTensor) -> TypingFloatTensor:
+        """ Applies squashing.
+
+        Args:
+            input_tensor: The tensor to squash.
+
+        Returns:
+            The squashed tensor.
+        """
         shifted_tensor: TypingFloatTensor = input_tensor + self.eps_input
         squared_norm: TypingFloatTensor = (shifted_tensor ** 2).sum(
             -1, keepdim=True) + self.eps_norm
@@ -66,7 +122,21 @@ class SquashLayer(nn.Module):
 
 
 class ConvLayer(nn.Module):
+    """ Applies convolution and batch normalization (if configured), with ReLU activation
+    afterwards.
+
+    Attributes:
+        conv: The convolution module from PyTorch, configured.
+        batch_norm: The batch normalization module from PyTorch, configured.
+        use_batch_norm: Boolean flag specifying whether batch norm is applied.
+
+    """
     def __init__(self, config: ConfigConv) -> None:
+        """ Initializer method. Configures batch normalization and convolution.
+
+        Args:
+            config: The configuration object for convolution layer.
+        """
         super(ConvLayer, self).__init__()
         self.conv: nn.Module = nn.Conv2d(in_channels=config.in_channels,
                                out_channels=config.out_channels,
@@ -76,6 +146,15 @@ class ConvLayer(nn.Module):
         self.use_batch_norm: bool = config.use_batch_norm
 
     def forward(self, input_tensor: TypingFloatTensor) -> TypingFloatTensor:
+        """ Applies convolution layer to input_tensor. Then applies batch normalization,
+        if configured, and ReLU activation on top.
+
+        Args:
+            input_tensor: Input tensor to convolution.
+
+        Returns:
+            The tensor after applying the announced transformations.
+        """
         convolved_input: TypingFloatTensor = self.conv(input_tensor)
         to_activate: TypingFloatTensor = convolved_input
         if self.use_batch_norm:
@@ -85,8 +164,31 @@ class ConvLayer(nn.Module):
 
 
 class PrimaryCaps(nn.Module):
+    """ Implements primary capsules. Primary capsules are the first layer of capsules applied. 
+    Capsules are interpreted as something for finding important objects and measuring properties 
+    of those objects. The length of the capsule output corresponds to the probability to have the 
+    object in the input. Deeper capsules account for deeper objects.
+
+    Attributes:
+        capsules: A module list with configured convolution layers applied at each capsule.
+        hook_handles: List with hooks/tricks to improve learning, e.g. replacing NaNs with
+            zeroes in gradients for stabilization.
+        dropouts: A module list with configured dropouts to be applied 
+            at capsule convolution outputs if configured.
+        capsule_output_dim: The flattened output dimension the capsule.
+        squash: Module for squashing pre-squashed stacked capsule outputs.
+        use_dropout: Boolean flag specifying whether dropout should be applied.
+    
+    """
     def __init__(self, primary_config: ConfigPrimary,
                  squash_config: ConfigSquash) -> None:
+        """ Initializer method. Configures convolutions and dropouts for each capsule,
+        creates squashing module and adds gradient hooks (if requested in config).
+
+        Args:
+            primary_config: Configuration for primary capsules.
+            squash_config: Configuration for squashing module.
+        """
         super(PrimaryCaps, self).__init__()
         self.capsules: nn.ModuleList = nn.ModuleList([
             nn.Conv2d(in_channels=primary_config.in_conv_channels,
@@ -110,12 +212,22 @@ class PrimaryCaps(nn.Module):
         self.use_dropout: bool = primary_config.use_dropout
 
     def remove_hooks(self) -> None:
+        """ Deactivates all applied hooks."""
         handle: Any
         for handle in self.hook_handles:
             handle.remove()
         self.hook_handles = list()
 
     def forward(self, input_tensor: TypingFloatTensor) -> TypingFloatTensor:
+        """ Applies primary capsules. Convolves, applies dropout (if specified 
+        by self.use_dropout), stacks, and squashes. 
+
+        Args:
+            input_tensor: The input tensor to the primary capsule layer.
+
+        Returns:
+            Squashed capsule outputs.
+        """
         capsule_list: List[TypingFloatTensor]
         if self.use_dropout:
             capsule_list = [drop(capsule(input_tensor))
@@ -132,8 +244,25 @@ class PrimaryCaps(nn.Module):
 
 
 class AgreementRouting(nn.Module):
+    """ Implements routing agreement. This process updates coupling coefficients
+    between primary capsule layers through several iterations, and returns capsule 
+    outputs after routing with iterative coupling.
+
+    Attributes:
+        n_iterations: Number of routing iterations.
+        num_input_caps: Number of capsules in the input layer.
+        num_output_caps: Number of capsules in the output layer.
+        use_cuda: Whether to use CUDA (true/false).
+        squash: The squashing module to apply while routing.
+    """
     def __init__(self, agreement_config: ConfigAgreement,
                  squash_config: ConfigSquash) -> None:
+        """ Initializer method. 
+
+        Args:
+            agreement_config: Configuration for routing agreement module.
+            squash_config: Configuration for squashing module.
+        """
         super(AgreementRouting, self).__init__()
 
         self.n_iterations: int = agreement_config.n_iterations
@@ -146,6 +275,15 @@ class AgreementRouting(nn.Module):
         self.squash: nn.Module = SquashLayer(squash_config)
 
     def forward(self, u_ji_predict_5d: TypingFloatTensor) -> TypingFloatTensor:
+        """ Applies routing agreement. 
+
+        Args:
+            u_ji_predict_5d: The prediction vectors (obtained by multiplying capsule outputs
+                u_i by weights W_{ij}).
+
+        Returns:
+            Outputs v_j of the capsules for the next capsule layer (squashed).
+        """
         u_ji_predict_4d: TypingFloatTensor = u_ji_predict_5d.squeeze(4)
         assert len(u_ji_predict_4d.shape) == 4
 
@@ -175,9 +313,35 @@ class AgreementRouting(nn.Module):
 
 
 class RecognitionCaps(nn.Module):
+    """ Implements recognition capsules. Recognition capsules are those applied after 
+    the first layer with primary capsules. Capsules are interpreted as something for 
+    finding important objects and measuring properties of those objects. The length of 
+    the capsule output corresponds to the probability to have the object in the input. 
+    Deeper capsules account for deeper objects.
+
+    Attributes:
+        num_input_caps: The number of input capsules.
+        input_caps_dim: Dimension of the input capsule vector.
+        num_output_caps: The number of output capsules.
+        output_caps_dim: Dimension of output capsule vector.
+        W_matrix_5d: Weight matrix to compute prediction 
+            vectors u[j|i] from input capsule outputs u_i.
+        W_hook_handle: Handle for W-related gradient hook. None if no hook applied.
+        agreement_routing: Configured module to apply agreement routing.
+        dropout: Configured module to apply dropout. 
+        use_dropout: Boolean flag whether to apply dropout regularization.
+    """
     def __init__(self, recognition_config: ConfigRecognition,
                  agreement_config: ConfigAgreement,
                  squash_config: ConfigSquash) -> None:
+        """ Initializer method. Creates weight matrix W_matrix_5d and corresponding gradient
+        hook (if configured). Also configures agreement_routing and dropout.
+        
+        Args:
+            recognition_config: Configuration for recognition capsule.
+            agreement_config: Configuration for agreement routing module.
+            squash_config: Configuration for squashing module.
+        """
         super(RecognitionCaps, self).__init__()
 
         self.num_input_caps: int = recognition_config.num_input_caps
@@ -202,11 +366,21 @@ class RecognitionCaps(nn.Module):
         self.use_dropout: bool = recognition_config.use_dropout
 
     def remove_hooks(self) -> None:
+        """ Deactivates all applied hooks."""
         if self.W_hook_handle is not None:
             self.W_hook_handle.remove()
             self.W_hook_handle = None
 
     def forward(self, input_tensor: TypingFloatTensor) -> TypingFloatTensor:
+        """ Applies recognition capsule to input_tensor. Essentially, converts outputs of
+        previous capsule layer to ouptut of the next capsule layer. 
+
+        Args:
+            input_tensor: The tensor with outputs from the previous capsule layer.
+
+        Returns:
+            The tensor with outputs for the further capsule layer.
+        """
         batch_size: Union[int, torch.int32] = input_tensor.size(0)
         input_stack: TypingFloatTensor = torch.stack(
             [input_tensor] * self.num_output_caps, dim=2).unsqueeze(4)
@@ -220,7 +394,27 @@ class RecognitionCaps(nn.Module):
 
 
 class ReconstructionNet(nn.Module):
+    """ Module to reconstruct the image of the predicted class 
+    (i.e. class with longest capsule vector). This reconstruction 
+    is used in the part of loss function computation (as regularizer), 
+    and can also provide an opportunity to create reconstructions 
+    for visual examination.
+
+    Attributes:
+        reconstruction_layers: A sequence with reconstruction layers. Each layer in the
+            sequence is fully-connected  with ReLU on top (except the final layer, where 
+            the result is activated with Sigmoid). 
+        use_cuda: Whether to use CUDA.
+        num_output_channels: Number of channels in the output image.
+        output_image_size: The size of ouptut image.
+        num_classes: The number of classes.
+    """
     def __init__(self, config: ConfigReconstruction) -> None:
+        """ Initializer method. Creates reconstruction layers. 
+
+        Args:
+            config: Configuration for the reconstruction module.
+        """
         super(ReconstructionNet, self).__init__()
 
         modules: List[nn.Module] = [
@@ -244,6 +438,15 @@ class ReconstructionNet(nn.Module):
 
     def forward(self, input_tensor: TypingFloatTensor
                 ) -> Tuple[TypingFloatTensor, TypingFloatTensor]:
+        """ Applies reconstruction module. 
+
+        Args:
+            input_tensor: The result from final capsule layer.
+
+        Returns:
+            Tuple with two elements. The first contains reconstructions, the
+            second contains the mask for the selected class.
+        """
         batch_size: Union[int, torch.int32] = input_tensor.size(0)
         logit_classes: TypingFloatTensor = torch.sqrt((input_tensor ** 2).sum(2))
         proba_classes: TypingFloatTensor = F.softmax(logit_classes, dim=1)
