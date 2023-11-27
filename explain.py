@@ -1,3 +1,10 @@
+""" Implements API related to explaining the created model."""
+
+# Author: Aliaksandr Nekrashevich
+# Email: aliaksandr.nekrashevich@queensu.ca
+# (c) Smith School of Business, 2021
+# (c) Smith School of Business, 2023
+
 from typing import Union
 
 import os
@@ -25,6 +32,11 @@ TypingIntTensor = Union[torch.IntTensor, torch.cuda.IntTensor]
 
 
 def check_and_make_folder(path_to_dir: str) -> None:
+    """ Checks if there is a specific folder, and if not, creates the folder. 
+
+    Args:
+        path_to_dir: The path to the directory.
+    """
     if not os.path.isdir(path_to_dir):
         if os.path.exists(path_to_dir):
             shutil.rmtree(path_to_dir)
@@ -32,13 +44,39 @@ def check_and_make_folder(path_to_dir: str) -> None:
 
 
 class CapsNetCallable:
+    """ Callable wrapper around CapsNet. The functionality is to apply CapsNet to 
+    a batch of raw images (transformed for getting into CapsNet-compatible format) 
+    and extract class probabilities.
+
+    Attributes:
+        use_cuda: Whether to use CUDA.
+        capsnet: The trained CapsNet module.
+        normalize_transform: The transformation to apply for converting images into
+            CapsNet-compatible format.
+    """
     def __init__(self, model: nn.Module,
-                 normalize_transform: nn.Module, use_cuda: bool):
+                 normalize_transform: nn.Module, use_cuda: bool) -> None:
+        """ Initializer method. 
+        
+        Args:
+            model: The trained CapsNet module.
+            normalize_transform: The transformation to apply for converting images
+                into CapsNet-compatible format.
+            use_cuda: Whether to use CUDA when calling CapsNet.
+        """ 
         self.use_cuda: bool = use_cuda
         self.capsnet: nn.Module = model
         self.normalize_transform: nn.Module = normalize_transform
 
     def __call__(self, images: np.array) -> np.array:
+        """ Implementation for the callable method. 
+
+        Args:
+            images: The batch with images to classify with CapsNet.
+
+        Returns:
+            Batch with class probabilities.
+        """
         images: TypingFloatTensor = torch.Tensor(images).permute(0, 3, 1, 2)
         batch: TypingFloatTensor = self.normalize_transform(T.Grayscale()(images)).float()
 
@@ -51,6 +89,14 @@ class CapsNetCallable:
 
 def explain_lime(benchmark: IBenchmark, model: nn.Module,
                  use_cuda: bool, explanation_dir: str) -> None:
+    """ Explains model with LIME. The results are saved to explanation_dir.
+
+    Args:
+        benchmark: The benchmark used for training and evaluating the model.
+        model: The CapsuleNet model to explain.
+        use_cuda: Whether to use CUDA.
+        explanation_dir: The directory for saving explanations.
+    """
     logging.info("Started LIME explanation.")
     check_and_make_folder(explanation_dir)
 
@@ -94,3 +140,4 @@ def explain_lime(benchmark: IBenchmark, model: nn.Module,
                    label2rgb(3 - mask_all, temp_all, bg_label=0))
 
     logging.info("Done with LIME explanation.")
+
