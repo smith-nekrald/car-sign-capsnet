@@ -29,11 +29,16 @@ class BenchmarkName:
         RUSSIAN: Key/Name for Russian benchmark.
         BELGIUM: Key/Name for Belgian benchmark.
         GERMANY: Key/Name for German benchmark.
+        ALL: Key/Name for sequentially training on all benchmarks.
+        CHOICE_OPTIONS: The list with choices for CLI argument parsing.
     """
     CHINESE: str = 'chinese'
     RUSSIAN: str = 'russian'
     BELGIUM: str = 'belgium'
     GERMANY:  str = 'germany'
+
+    ALL: str = 'all'
+    CHOICE_OPTIONS: str = [CHINESE, RUSSIAN, BELGIUM, GERMANY, ALL]
 
 
 class NameKeys:

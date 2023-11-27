@@ -4,7 +4,9 @@ from typing import Any
 from typing import TextIO
 from collections import OrderedDict
 from collections import defaultdict
+
 import logging
+import argparse
 import json
 import os
 
@@ -238,12 +240,25 @@ def output_stats(json_stats, table_stats) -> None:
     stats_df.to_latex(path_to_stats_tex, float_format="%.2f")
 
 
-def perform_launches() -> None:
+def perform_launches(args: argparse.Namespace) -> None:
+    """ Performs experimetns and collects summary statistics. 
+
+    Args:
+        args: Namespace with CLI arguments.
+    """
     json_stats: Dict[str, Any] = OrderedDict()
     table_stats: Dict[str, List[Any]] = defaultdict(list)
 
-    perform_german_launches(json_stats, table_stats)
-    perform_chinese_launches(json_stats, table_stats)
-    perform_russian_launches(json_stats, table_stats)
-    perform_belgium_launches(json_stats, table_stats)
+    if args.benchmark in [BenchmarkName.ALL, BenchmarkName.GERMANY]:
+        perform_german_launches(json_stats, table_stats)
+
+    if args.benchmark in [BenchmarkName.ALL, BenchmarkName.CHINESE]:
+        perform_chinese_launches(json_stats, table_stats)
+
+    if args.benchmark in [BenchmarkName.ALL, BenchmarkName.RUSSIAN]:
+        perform_russian_launches(json_stats, table_stats)
+
+    if args.benchmark in [BenchmarkName.ALL, BenchmarkName.BELGIUM]:
+        perform_belgium_launches(json_stats, table_stats)
+
     output_stats(json_stats, table_stats)
