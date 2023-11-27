@@ -1,3 +1,10 @@
+""" Implements CapsNet training logic. """
+
+# Author: Aliaksandr Nekrashevich
+# Email: aliaksandr.nekrashevich@queensu.ca
+# (c) Smith School of Business, 2021
+# (c) Smith School of Business, 2023
+
 from typing import Tuple
 from typing import Optional
 from typing import Union
@@ -43,6 +50,32 @@ def process_epoch(epoch_idx: int, benchmark: IBenchmark,
                   writer: SummaryWriter, train_mode: bool, log_frequency: int,
                   use_clipping: bool, clip_value: Optional[float]
                   ) -> ProcessEpochReturnTyping:
+    """ Broad method responsible for epoch training or epoch testing, depending on the
+    input parameters.
+
+    Args:
+        epoch_idx: Epoch index.
+        benchmark: Benchmark of the current experiment.
+        capsule_net: The capsule network for training or evaluation.
+        optimizer: The optimizer for updating network weights, if relevant.
+        use_cuda: Whether to use CUDA.
+        n_classes: Number of classes.
+        writer: Writer to TensorBoard.
+        train_mode: If true, train logic is applied. If false, testing logic is applied.
+        log_frequency: Frequency of logging.
+        use_clipping: Whether to use gradient clipping.
+        clip_value: The threshold for gradient clipping.
+
+
+    Returns:
+        A tuple with two or four elements, depending on train_mode: 
+            If training, returns a tuple with two elements. The first is the 
+        average epoch training loss.  The second is training epoch acuracy.
+            If testing, returns a tuple with four elements. The first is some 
+        testing batch with data. The second is the reconstructions on that batch. 
+        The third is the average test loss value on that epoch. The fourth is the 
+        test accuracy on that epoch. 
+    """
     data_loader: DataLoader; mode_string: str
     if train_mode:
         capsule_net.train()
@@ -68,7 +101,8 @@ def process_epoch(epoch_idx: int, benchmark: IBenchmark,
     batch_id: int; labels: TypingIntTensor
     for batch_id, (data, labels) in enumerate(data_loader):
         if batch_id % log_frequency == 0:
-            logging.info(f"{mode_string.capitalize()} batch {batch_id} out of {len(data_loader)}")
+            logging.info(
+                f"{mode_string.capitalize()} batch {batch_id} out of {len(data_loader)}")
         target: TypingFloatTensor
         target = torch.sparse.torch.eye(n_classes).index_select(dim=0, index=labels)
         data, target = Variable(data), Variable(target)
@@ -88,7 +122,8 @@ def process_epoch(epoch_idx: int, benchmark: IBenchmark,
         if train_mode:
             batch_loss.backward()
             if use_clipping:
-                torch.nn.utils.clip_grad_norm_(capsule_net.parameters(), clip_value, norm_type=2.0)
+                torch.nn.utils.clip_grad_norm_(
+                    capsule_net.parameters(), clip_value, norm_type=2.0)
             optimizer.step()
 
         epoch_loss += batch_loss.data.item() * data.shape[0]
@@ -112,7 +147,9 @@ def process_epoch(epoch_idx: int, benchmark: IBenchmark,
             running_loss, running_sample_count, running_match_count = 0., 0, 0
 
         if batch_id % log_frequency == 0:
-            logging.info(f"{mode_string.capitalize()} batch accuracy: {batch_match_count/ float(data.shape[0])}")
+            logging.info(
+                f"{mode_string.capitalize()} batch accuracy: " 
+                + f"{batch_match_count/ float(data.shape[0])}")
 
     avg_epoch_loss: float = epoch_loss / sample_count
     epoch_accuracy: float = accuracy_match_count / sample_count
@@ -134,6 +171,25 @@ def train_epoch(epoch_idx: int, benchmark: IBenchmark, capsule_net: nn.Module,
                 writer: SummaryWriter, log_frequency: int,
                 use_clipping: bool, clip_threshold: Optional[float]
                 ) -> ProcessEpochReturnTyping:
+    """ Performs epoch of training.
+
+    Args:
+        epoch_idx: Epoch index.
+        benchmark: Benchmark of the current experiment.
+        capsule_net: The capsule network for training.
+        optimizer: The optimizer for updating network weights.
+        use_cuda: Whether to use CUDA.
+        n_classes: Number of classes.
+        writer: Writer to TensorBoard.
+        log_frequency: Frequency of logging.
+        use_clipping: Whether to use gradient clipping.
+        clip_threshold: The threshold for gradient clipping.
+
+    Returns:
+        Tuple with two elements. The first is the 
+        average epoch training loss.  The second is 
+        training epoch acuracy.
+    """
     return process_epoch(epoch_idx, benchmark, capsule_net, optimizer,
                   use_cuda, n_classes, writer, True, log_frequency,
                   use_clipping, clip_threshold)
@@ -142,12 +198,43 @@ def train_epoch(epoch_idx: int, benchmark: IBenchmark, capsule_net: nn.Module,
 def eval_epoch(epoch_idx: int, benchmark: IBenchmark, capsule_net: nn.Module,
                use_cuda: bool, n_classes: int, writer: SummaryWriter, log_frequency: int
                ) -> ProcessEpochReturnTyping:
+    """ Evaluates epoch. 
+
+    Args:
+        epoch_idx: Epoch index.
+        benchmark: Benchmark of the current experiment.
+        capsule_net: The capsule network for evaluation.
+        use_cuda: Whether to use CUDA.
+        n_classes: Number of classes.
+        writer: Writer to TensorBoard.
+        log_frequency: Frequency of logging.
+
+    Returns:
+        Tuple with four elements. 
+        The first is some testing batch with data. 
+        The second is the reconstructions on that batch. 
+        The third is the average test loss value on that epoch. 
+        The fourth is the test accuracy on that epoch. 
+
+    """
     return process_epoch(epoch_idx, benchmark, capsule_net, None,
                          use_cuda, n_classes, writer, False,
                          log_frequency, False, None)
 
 
 def do_training(setup_config: SetupConfig) -> Tuple[int, float, float, float, float]:
+    """ Entry point to the training procedure. Trains capsule network,
+    creates visualizations and provides LIME explanations if requested.
+
+    Args:
+        setup_config: Experiment configuration.
+
+    Returns:
+        Tuple with five elements. The first is the epoch number that achieved the best test 
+        performance. The second is the test accuracy on that epoch. The third is the test 
+        loss value on that epoch. The fourth is the train accuracy on that epoch. The fifth
+        is the train loss value on that epoch.
+    """
     logging.info("Started training.")
 
     benchmark_config: ConfigBenchmark = setup_config.benchmark_config
@@ -237,6 +324,11 @@ def do_training(setup_config: SetupConfig) -> Tuple[int, float, float, float, fl
 
 
 def cuda_cache_reset(use_cuda: bool) -> None:
+    """ Explicitly called memory management. 
+
+    Args:
+        use_cuda: Whether CUDA is used, since then CUDA-specific memory management is requested.
+    """
     gc.collect()
     if use_cuda:
         torch.cuda.empty_cache()
@@ -247,6 +339,20 @@ def dump_checkpoint(training_config: ConfigTraining, benchmark_name: str,
                     capsule_net: nn.Module, optimizer: Optimizer,
                     test_loss: float, test_accuracy: float,
                     train_loss: float, train_accuracy: float) -> None:
+    """ Dumps checkpoint.  
+
+    Args:
+        training_config: The training configuration.
+        benchmark_name: The name of the benchmark.
+        checkpoint_id: The checkpoint identifier.
+        epoch_idx: The epoch index.
+        capsule_net: The network at the current state.
+        optimizer: The optimizer at the current state.
+        test_loss: The loss value on test set.
+        test_accuracy: The accuracy value on test set.
+        train_loss: The loss value on train set.
+        train_accuracy: The accuracy value on train set.
+    """
     if not training_config.dump_checkpoints:
         return
     if not os.path.isdir(training_config.checkpoint_root):
@@ -265,6 +371,28 @@ def iterate_training(start_epoch_idx: int, n_epochs: int, benchmark: IBenchmark,
                      training_config: ConfigTraining, benchmark_name: str
                      ) -> Tuple[TypingFloatTensor, TypingFloatTensor,
                                 int, float, float, float, float]:
+    """ Method responsible for iterative training. 
+    Iterates until the desired number of epochs is achieved. 
+
+    Args:
+        start_epoch_idx: The epoch intex to start.
+        n_epochs: The total number of epochs.
+        benchmark: The current benchmark for training and evaluation.
+        capsule_net: The network to train and evaluate.
+        optimizer: The optimizer for loss optimization.
+        use_cuda: Whether to use CUDA.
+        n_classes: The number of classes.
+        writer: Writer for providing information to TensorBoard.
+        training_config: The training configuration.
+        benchmark_name: The name of the current benchmark for training and evaluation.
+
+    Returns:
+        Tuple with seven elements. The first is some testing batch with data. The second
+        is the reconstructions on that batch. The third is the epoch number that achieved 
+        the best test performance. The fourth is the test accuracy on that epoch. The fifth 
+        is the test loss value on that epoch. The sixth is the train accuracy on that epoch. 
+        The seventh is the train loss value on that epoch.
+    """
     logging.info("Started training iterations.")
     best_test_accuracy: float = 0.
     epoch_on_best_test: int = -1
@@ -312,3 +440,4 @@ def iterate_training(start_epoch_idx: int, n_epochs: int, benchmark: IBenchmark,
     return (data, reconstructions, epoch_on_best_test,
             best_test_accuracy, test_loss_on_best_test,
             train_accuracy_on_best_test, train_loss_on_best_test)
+
