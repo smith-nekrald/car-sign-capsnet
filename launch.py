@@ -1,3 +1,10 @@
+""" API related to launching training experiments and statistics aggregation. """
+
+# Author: Aliaksandr Nekrashevich
+# Email: aliaksandr.nekrashevich@queensu.ca
+# (c) Smith School of Business, 2021
+# (c) Smith School of Business, 2023
+
 from typing import Dict
 from typing import List
 from typing import Any
@@ -27,10 +34,27 @@ from keys import StatsTableKeys
 from keys import NameKeys
 
 
-def fill_stats(json_stats: Dict[str, Any], table_stats: Dict[str, Any], epoch_id: int,
-               test_accuracy: float, test_loss: float,
-               train_accuracy: float, train_loss: float,
+def fill_stats(json_stats: Dict[str, Any], 
+               table_stats: Dict[str, Any], 
+               epoch_id: int, 
+               test_accuracy: float, 
+               test_loss: float, 
+               train_accuracy: float, 
+               train_loss: float, 
                benchmark_name: str) -> None:
+    """ Adds benchmark statistics to stats-collecting structres.
+
+    Args:
+        json_stats: Storage for statistics in JSON format.
+        table_stats: Storage for statistics  in pre-table format (for 
+            creating pandas DataFrame with from_dict API).
+        epoch_id: The index of optimal epoch.
+        test_accuracy: The test accuracy.
+        test_loss: The test loss.
+        train_accuracy: The train accuracy.
+        train_loss: The train loss.
+        benchmark_name: The benchmark name.
+    """
     benchmark_stats: Dict[str, Any] = dict()
     json_stats[benchmark_name] = benchmark_stats
     table_stats[StatsTableKeys.DATASET].append(benchmark_name)
@@ -48,7 +72,15 @@ def fill_stats(json_stats: Dict[str, Any], table_stats: Dict[str, Any], epoch_id
 
 def perform_test_launches(json_stats: Dict[str, Any],
                           table_stats: Dict[str, Any]) -> None:
+    """ Executes test launch. 
+
+    Args:
+        json_stats: Storage for statistics in JSON format.
+        table_stats: Storage for statistics  in pre-table format (for 
+            creating pandas DataFrame with from_dict API).
+    """
     logging.info("Test launch.")
+
     config: SetupConfig = SetupConfig()
     config.training_config.n_epochs = 1
     config.training_config.batch_size = 16
@@ -71,6 +103,13 @@ def perform_test_launches(json_stats: Dict[str, Any],
 
 def perform_chinese_launches(json_stats: Dict[str, Any],
                              table_stats: Dict[str, Any]) -> None:
+    """ Executes training launch on Chinese benchmark.
+
+    Args:
+        json_stats: Storage for statistics in JSON format.
+        table_stats: Storage for statistics  in pre-table format (for 
+            creating pandas DataFrame with from_dict API).
+    """
     logging.info("Performing Chinese Launches.")
     config: SetupConfig = SetupConfig()
     config.training_config.n_epochs = 100
@@ -93,6 +132,13 @@ def perform_chinese_launches(json_stats: Dict[str, Any],
 
 def perform_german_launches(json_stats: Dict[str, Any],
                             table_stats: Dict[str, Any]) -> None:
+    """ Executes training launch on German benchmark.
+
+    Args:
+        json_stats: Storage for statistics in JSON format.
+        table_stats: Storage for statistics  in pre-table format (for 
+            creating pandas DataFrame with from_dict API).
+    """
     logging.info("Performing German Launches.")
     config: SetupConfig = SetupConfig()
 
@@ -137,6 +183,13 @@ def perform_german_launches(json_stats: Dict[str, Any],
 
 def perform_belgium_launches(json_stats: Dict[str, Any],
                              table_stats: Dict[str, Any]) -> None:
+    """ Executes training launch on Belgium benchmark.
+
+    Args:
+        json_stats: Storage for statistics in JSON format.
+        table_stats: Storage for statistics  in pre-table format (for 
+            creating pandas DataFrame with from_dict API).
+    """
     logging.info("Performing Belgium Launches.")
     config: SetupConfig = SetupConfig()
 
@@ -177,6 +230,13 @@ def perform_belgium_launches(json_stats: Dict[str, Any],
 
 def perform_russian_launches(json_stats: Dict[str, Any],
                              table_stats: Dict[str, Any]) -> None:
+    """ Executes training launch on Russian benchmark.
+
+    Args:
+        json_stats: Storage for statistics in JSON format.
+        table_stats: Storage for statistics  in pre-table format (for 
+            creating pandas DataFrame with from_dict API).
+    """
     logging.info("Performing Russian Launches.")
     config: SetupConfig = SetupConfig()
 
@@ -224,7 +284,13 @@ def perform_russian_launches(json_stats: Dict[str, Any],
     logging.info("Done with Russian Launches.")
 
 
-def output_stats(json_stats, table_stats) -> None:
+def output_stats(json_stats: Dict[str, Any], table_stats: Dict[str, Any]) -> None:
+    """ Exports stats to files. 
+    
+    Args:
+        json_stats: Statistics in JSON format.
+        table_stats: Statistics in table-friendly format.
+    """
     file_stats: TextIO
     path_to_stats_json: str = os.path.join(
         NameKeys.TRAINDIR, NameKeys.STATS_JSON)
@@ -262,3 +328,4 @@ def perform_launches(args: argparse.Namespace) -> None:
         perform_belgium_launches(json_stats, table_stats)
 
     output_stats(json_stats, table_stats)
+
