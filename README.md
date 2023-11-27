@@ -14,6 +14,7 @@ Prerequisites:
    conda install -c conda-forge shap
    conda install scikit-image
    conda install openpyxl
+   pip install -U pyinstaller	
 ```
    
 It can be easier to install them into a separate
@@ -24,7 +25,7 @@ conda environment:
     conda activate torch
     <install libraries>
     <run the script>
-    coda deactivate 
+    conda deactivate 
 ```
     
 Reproduction:
