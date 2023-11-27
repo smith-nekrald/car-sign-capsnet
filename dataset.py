@@ -1,3 +1,12 @@
+""" Implements Dataset API - family of PyTorch-friendly benchmark-specific classes 
+used for transforming image input and creating batches. 
+"""
+
+# Author: Aliaksandr Nekrashevich
+# Email: aliaksandr.nekrashevich@queensu.ca
+# (c) Smith School of Business, 2021
+# (c) Smith School of Business, 2023
+
 from typing import List
 from typing import Optional
 from typing import Tuple
@@ -20,9 +29,31 @@ TransformType = Union[None, Compose, Module]
 
 
 class DynamicDataset(Dataset, ABC):
+    """ DynamicDataset is a PyTorch friendly proxy for reading data and creating image batches. 
+    The parent class Dataset does the vast majority of the job, so this class only implements
+    some methods to fill the gaps between pre-implemented and modified API.
+    
+    Attributes:
+        static_transform: Static initial transformation version, used at evaluation.
+        random_transform: Random initial transformation version, used at training.
+        transform: The currently set initial tranformation.
+        idx2class: Maps entry index to class.
+        idx2name: Maps entry index to relative path (often simply image name).
+        root_dir: Path to root directory with dataset images.
+        annotations_path: Path to file with annotations, when relevant.
+        n_classes: Number of classes.
+    """
     def __init__(self, root_dir: str, annotations_path: Optional[str],
                  static_transform: TransformType,
                  random_transform: TransformType) -> None:
+        """ Initializer method. 
+
+        Args:
+            root_dir: Path to root directory with dataset images.
+            annotations_path: Path to annotation file, if relevant.
+            static_transform: Static image transformation version (used at evaluation).
+            random_transform: Dynamic image transformation version (used at training).
+        """
         super().__init__()
         self.static_transform: TransformType = static_transform
         self.random_transform: TransformType = random_transform
@@ -35,10 +66,14 @@ class DynamicDataset(Dataset, ABC):
         self.idx2name: List[str] = list()
 
         self.root_dir: str = root_dir
-        self.annotations_path: str = annotations_path
+        self.annotations_path: Optional[str] = annotations_path
         self.n_classes: Optional[int] = None
 
-    def existence_tweak(self):
+    def existence_tweak(self) -> None:
+        """ Tweak to ensure consistency with the class-path structures. Some benchmark have
+        some annotations linking to non-existent images, and this method filters for such
+        entries.
+        """
         verified_idx2class: List[int] = list()
         verified_idx2name: List[str] = list()
 
@@ -51,13 +86,24 @@ class DynamicDataset(Dataset, ABC):
         self.idx2class = verified_idx2class
         self.idx2name = verified_idx2name
 
-    def static_mode(self):
+    def static_mode(self) -> None:
+        """ Turns static mode on. Now static_transform is applied when transform requested. """
         self.transform = self.static_transform
 
-    def random_mode(self):
+    def random_mode(self) -> None:
+        """ Turns dynamic mode on. Now random_transform is applied when transform requested. """
         self.transform = self.random_transform
 
     def __getitem__(self, idx: Union[torch.Tensor, int]) -> Tuple[Image.Image, int]:
+        """ Getter by index. Method needed re-implementation to link prepared and desired APIs. 
+
+        Args:
+            idx: Index of the object to get.
+            
+        Returns:
+            Tuple with two elements. The first element is the transformed
+                image, the second element is the image class label.
+        """
         if torch.is_tensor(idx):
             idx = idx.item()
         assert isinstance(idx, int)
@@ -72,21 +118,41 @@ class DynamicDataset(Dataset, ABC):
         return (image, label)
 
     def __len__(self) -> int:
+        """ Method to request data length. Needs re-implementation for 
+        linking prepared and desired APIs. 
+        
+        Returns:
+            The number of entries in the dataset.
+        """
         return len(self.idx2class)
 
 
 class ChineseDataset(DynamicDataset):
+    """ Specifies DynamicDataset for Chinese benchmark. 
+
+    Attributes:
+        annotation_df: The Pandas DataFrame with annotations.
+    """
     def __init__(self, path_to_img_dir: str, path_to_annotations: str,
-                 static_transform: TransformType,
-                 random_transform: TransformType) -> None:
+                 static_transform: TransformType, random_transform: TransformType) -> None:
+        """ Initializer method. 
+
+        Args:
+            path_to_img_dir: Path to root directory with dataset images.
+            path_to_annotations_file: Path to file with annotations.
+            static_transform: Static image transformation version (used at evaluation).
+            random_transform: Dynamic image transformation version (used at training).
+
+        """
         super().__init__(path_to_img_dir, path_to_annotations,
                          static_transform, random_transform)
 
-        column_names: List[str] = ['file_name', 'img_width', 'img_height',
-                                   'sign_x_top', 'sign_y_top',
-                                   'sign_x_bottom', 'sign_y_bottom', 'label']
-        self.annotation_df: pd.DataFrame = pd.read_csv(path_to_annotations, sep=';', header=None,
-                                                       index_col=False, names=column_names)
+        column_names: List[str] = [
+            'file_name', 'img_width', 'img_height', 'sign_x_top', 
+            'sign_y_top', 'sign_x_bottom', 'sign_y_bottom', 'label']
+        self.annotation_df: pd.DataFrame = pd.read_csv(
+            path_to_annotations, sep=';', header=None, 
+            index_col=False, names=column_names)
 
         self.idx2class: List[int] = list(self.annotation_df['label'])
         self.idx2name: List[str] = list(self.annotation_df['file_name'])
@@ -96,9 +162,23 @@ class ChineseDataset(DynamicDataset):
 
 
 class GermanDataset(DynamicDataset):
+    """ Specifies DynamicDataset for German benchmark. 
+
+    Attributes:
+        annotation_df: The Pandas DataFrame with annotations.
+    """
     def __init__(self, path_to_img_dir: str, path_to_annotations: str,
                  static_transform: Union[None, Compose, Module],
                  random_transform: Union[None, Compose, Module]) -> None:
+        """ Initializer method. 
+
+        Args:
+            path_to_img_dir: Path to root directory with dataset images.
+            path_to_annotations_file: Path to file with annotations.
+            static_transform: Static image transformation version (used at evaluation).
+            random_transform: Dynamic image transformation version (used at training).
+
+        """
         super().__init__(path_to_img_dir, path_to_annotations,
                          static_transform, random_transform)
         self.annotation_df: pd.DataFrame = pd.read_csv(
@@ -113,9 +193,23 @@ class GermanDataset(DynamicDataset):
 
 
 class RussianDataset(DynamicDataset):
+    """ Specifies DynamicDataset for Russian benchmark. 
+
+    Attributes:
+        annotation_df: The Pandas DataFrame with annotations.
+    """
     def __init__(self, path_to_img_dir: str, path_to_annotations: str,
                  static_transform: Union[None, Compose, Module],
                  random_transform: Union[None, Compose, Module]) -> None:
+        """ Initializer method. 
+
+        Args:
+            path_to_img_dir: Path to root directory with dataset images.
+            path_to_annotations_file: Path to file with annotations.
+            static_transform: Static image transformation version (used at evaluation).
+            random_transform: Dynamic image transformation version (used at training).
+
+        """
         super().__init__(path_to_img_dir, path_to_annotations,
                          static_transform, random_transform)
         self.annotation_df: pd.DataFrame = pd.read_csv(
@@ -130,9 +224,21 @@ class RussianDataset(DynamicDataset):
 
 
 class BelgiumDataset(DynamicDataset):
+    """ Specifies DynamicDataset for Belgium benchmark. """
+
     def __init__(self, path_to_img_dir: str, path_to_annotations: Optional[str],
                  static_transform: Union[None, Compose, Module],
                  random_transform: Union[None, Compose, Module]) -> None:
+        """ Initializer method. 
+
+        Args:
+            path_to_img_dir: Path to root directory with dataset images.
+            path_to_annotations_file: Path to file with annotations. Irrelevant for 
+                this dataset, since class labels are encoded in file names.
+            static_transform: Static image transformation version (used at evaluation).
+            random_transform: Dynamic image transformation version (used at training).
+
+        """
         super().__init__(path_to_img_dir, path_to_annotations,
                          static_transform, random_transform)
         self.n_classes = 0
@@ -148,3 +254,5 @@ class BelgiumDataset(DynamicDataset):
                         self.idx2class.append(image_class)
                         self.idx2name.append(image_path)
                         self.n_classes = max(self.n_classes, image_class + 1)
+
+
