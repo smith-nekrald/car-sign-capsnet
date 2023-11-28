@@ -5,7 +5,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>{e10061ec-bafc-4062-ac9c-6eef3310628f}</ProjectGuid>
     <ProjectHome />
-    <StartupFile>run-capsnet.py</StartupFile>
+    <StartupFile>run_capsnet.py</StartupFile>
     <SearchPath />
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>
@@ -28,8 +28,8 @@
     <Compile Include="keys.py" />
     <Compile Include="launch.py" />
     <Compile Include="layers.py" />
-    <Compile Include="run-capsnet.py" />
     <Compile Include="network.py" />
+    <Compile Include="run_capsnet.py" />
     <Compile Include="train.py" />
     <Compile Include="visualize.py" />
     <Compile Include="__init__.py" />

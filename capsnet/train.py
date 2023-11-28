@@ -69,9 +69,9 @@ def process_epoch(epoch_idx: int, benchmark: IBenchmark,
 
     Returns:
         A tuple with two or four elements, depending on train_mode: 
-            If training, returns a tuple with two elements. The first is the 
+        If training, returns a tuple with two elements. The first is the 
         average epoch training loss.  The second is training epoch acuracy.
-            If testing, returns a tuple with four elements. The first is some 
+        If testing, returns a tuple with four elements. The first is some 
         testing batch with data. The second is the reconstructions on that batch. 
         The third is the average test loss value on that epoch. The fourth is the 
         test accuracy on that epoch. 

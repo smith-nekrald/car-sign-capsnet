@@ -78,11 +78,11 @@ def nan_gradient_hook_module(module: nn.Module, in_gradient: TypingFloatTensor,
 
 class SquashLayer(nn.Module):
     """ Implements squashing. The formula from original paper is:
-        v_j = ||s_j||^2 / (1 + ||s_j||^2) * s_j / ||s_j||
+        $v_j = ||s_j||^2 / (1 + ||s_j||^2) * s_j / ||s_j||$
         However, due to numerical stability issues, the applied formula is:
-            v_j = (||s_j + eps_input||^2 + eps_norm) 
-            / (eps_denom + 1 + eps_norm  + ||s_j + eps_input||^2) 
-            * (s_j + eps_input) / sqrt(eps_norm + ||s_j + eps_input||^2 + eps_sqrt)                
+        $v_j = (||s_j + eps_input||^2 + eps_norm) 
+        / (eps_denom + 1 + eps_norm  + ||s_j + eps_input||^2) 
+        * (s_j + eps_input) / sqrt(eps_norm + ||s_j + eps_input||^2 + eps_sqrt)$                
     
     Attributes:
         eps_denom: Shift added in denominator for numerical stability.

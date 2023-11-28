@@ -1,4 +1,3 @@
-@echo off
 
 REM Creates documentation in HTML and PDF with Sphinx.
 
@@ -17,5 +16,5 @@ make html
 make latexpdf
 cd ..
 
-set +uexo
+
 

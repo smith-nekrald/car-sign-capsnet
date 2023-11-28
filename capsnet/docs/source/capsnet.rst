@@ -84,10 +84,10 @@ capsnet.network module
    :undoc-members:
    :show-inheritance:
 
-capsnet.run\-capsnet module
+capsnet.run\_capsnet module
 ---------------------------
 
-.. automodule:: capsnet.run-capsnet
+.. automodule:: capsnet.run_capsnet
    :members:
    :undoc-members:
    :show-inheritance:
