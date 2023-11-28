@@ -1,4 +1,4 @@
-
+@echo off
 REM Creates documentation in HTML and PDF with Sphinx.
 
 REM Author: Aliaksandr Nekrashevich
@@ -7,13 +7,12 @@ REM (c) Smith School of Business, 2023
 
 
 cd docs
-make.bat clean
+call make.bat clean
 cd ..
-sphinx-apidoc -f -o "docs/source/" "./" 
+call sphinx-apidoc -f -o "docs/source/" "./" 
 cd docs
-make html
-
-make latexpdf
+call make html
+call make latexpdf
 cd ..
 
 
