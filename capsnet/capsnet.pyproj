@@ -41,6 +41,8 @@
     <Content Include=".gitignore" />
     <Content Include="document.bat" />
     <Content Include="executable.bat" />
+    <Content Include="install.bat" />
+    <Content Include="launch.bat" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
 </Project>
