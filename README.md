@@ -47,4 +47,9 @@ calling `tensorboard --logdir=./traindir`
 from `project_root/capsnet`. Execution summary
 is available at `project_root/capsnet/traindir/stats.json`.
 
+Traindir with execution results is available at: 
+https://drive.google.com/file/d/1enFqS_TE7eQ5wB3AKLoJ3sTtjVFiuKgP
+ 
+All benchmarks in one place can be found at: 
+https://drive.google.com/file/d/10Nl3ucj1b4u8H-yvl3JNTIBWLtiVN2Eu
 
