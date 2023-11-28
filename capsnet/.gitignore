@@ -1,0 +1,7 @@
+.idea
+traindir
+__pycache__
+.vs
+*.spec
+*.pyc
+docs/build

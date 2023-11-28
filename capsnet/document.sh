@@ -22,6 +22,6 @@ make html
 
 make latexpdf
 cd "$script_dir"
-deactivate
+
 set +uexo
 
