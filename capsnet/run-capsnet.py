@@ -9,15 +9,24 @@
 import logging
 import os
 import uuid
+import sys
+import pathlib
 import argparse
 
 import random
 import numpy as np
 import torch
 
-from keys import NameKeys
-from launch import perform_launches
-from keys import BenchmarkName
+
+if __name__ == '__main__':
+    _file_path: pathlib.Path = pathlib.Path(__file__)
+    sys.path.append(str(_file_path.absolute().parent))
+    sys.path.append(str(_file_path.absolute().parent.parent))
+
+
+from capsnet.keys import NameKeys
+from capsnet.launch import perform_launches
+from capsnet.keys import BenchmarkName
 
 
 def parse_arguments() -> argparse.Namespace:

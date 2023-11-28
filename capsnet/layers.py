@@ -18,12 +18,12 @@ import torch.cuda
 import torch.nn as nn
 import torch.nn.functional as F
 
-from config import ConfigSquash
-from config import ConfigConv
-from config import ConfigPrimary
-from config import ConfigAgreement
-from config import ConfigRecognition
-from config import ConfigReconstruction
+from capsnet.config import ConfigSquash
+from capsnet.config import ConfigConv
+from capsnet.config import ConfigPrimary
+from capsnet.config import ConfigAgreement
+from capsnet.config import ConfigRecognition
+from capsnet.config import ConfigReconstruction
 
 TypingFloatTensor = Union[torch.FloatTensor, torch.cuda.FloatTensor]
 TypingBoolTensor = Union[torch.BoolTensor, torch.cuda.BoolTensor]

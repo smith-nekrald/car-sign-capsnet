@@ -23,8 +23,8 @@ from lime import lime_image
 from lime.explanation import Explanation
 from lime.wrappers.scikit_image import SegmentationAlgorithm
 
-from benchmark import IBenchmark
-from keys import NameKeys
+from capsnet.benchmark import IBenchmark
+from capsnet.keys import NameKeys
 
 TypingFloatTensor = Union[torch.FloatTensor, torch.cuda.FloatTensor]
 TypingBoolTensor = Union[torch.BoolTensor, torch.cuda.BoolTensor]

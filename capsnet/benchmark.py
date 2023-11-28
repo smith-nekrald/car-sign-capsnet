@@ -19,17 +19,17 @@ import torch
 from torch.utils.data import DataLoader
 from torchvision import transforms as T
 
-from dataset import ChineseDataset
-from dataset import GermanDataset
-from dataset import BelgiumDataset
-from dataset import RussianDataset
-from dataset import TransformType
-from dataset import DynamicDataset
-from config import ConfigBenchmark
-from keys import ColorSchema
-from keys import BenchmarkName
-from keys import FileFolderPaths
-from estimate import estimate_normalization
+from capsnet.dataset import ChineseDataset
+from capsnet.dataset import GermanDataset
+from capsnet.dataset import BelgiumDataset
+from capsnet.dataset import RussianDataset
+from capsnet.dataset import TransformType
+from capsnet.dataset import DynamicDataset
+from capsnet.config import ConfigBenchmark
+from capsnet.keys import ColorSchema
+from capsnet.keys import BenchmarkName
+from capsnet.keys import FileFolderPaths
+from capsnet.estimate import estimate_normalization
 
 TypingFloatTensor = Union[torch.FloatTensor, torch.cuda.FloatTensor]
 

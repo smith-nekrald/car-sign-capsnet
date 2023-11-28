@@ -10,9 +10,9 @@ from typing import Union
 from typing import Tuple
 from typing import List
 
-from keys import BenchmarkName
-from keys import ColorSchema
-from keys import Constants
+from capsnet.keys import BenchmarkName
+from capsnet.keys import ColorSchema
+from capsnet.keys import Constants
 
 
 class ConfigSquash:

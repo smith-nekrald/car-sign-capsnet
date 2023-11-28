@@ -24,18 +24,18 @@ from torch.optim import Optimizer
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import DataLoader
 
-from network import CapsNet
-from config import SetupConfig
-from config import ConfigBenchmark
-from config import ConfigTraining
-from benchmark import build_benchmark
-from benchmark import IBenchmark
-from visualize import plot_images_separately
-from explain import explain_lime
-from explain import check_and_make_folder
-from keys import NameKeys
-from checkpoint import load_checkpoint
-from checkpoint import save_checkpoint
+from capsnet.network import CapsNet
+from capsnet.config import SetupConfig
+from capsnet.config import ConfigBenchmark
+from capsnet.config import ConfigTraining
+from capsnet.benchmark import build_benchmark
+from capsnet.benchmark import IBenchmark
+from capsnet.visualize import plot_images_separately
+from capsnet.explain import explain_lime
+from capsnet.explain import check_and_make_folder
+from capsnet.keys import NameKeys
+from capsnet.checkpoint import load_checkpoint
+from capsnet.checkpoint import save_checkpoint
 
 TypingFloatTensor = Union[torch.FloatTensor, torch.cuda.FloatTensor]
 TypingBoolTensor = Union[torch.BoolTensor, torch.cuda.BoolTensor]

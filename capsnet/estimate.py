@@ -19,7 +19,7 @@ from torch.utils.data import DataLoader
 from torchvision.transforms import Compose
 import torchvision.transforms as T
 
-from dataset import DynamicDataset
+from capsnet.dataset import DynamicDataset
 
 TransformType = Union[None, Compose, Module]
 NormalizationTyping = Union[Tuple[float, float], Tuple[List[float], List[float]]]

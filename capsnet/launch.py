@@ -19,19 +19,19 @@ import os
 
 import pandas as pd
 
-from config import SetupConfig
-from config import ConfigSquash
-from config import ConfigRecognition
-from config import ConfigReconstruction
-from config import ConfigAgreement
-from config import ConfigTraining
-from config import ConfigBenchmark
-from config import ConfigPrimary
-from config import ConfigConv
-from train import do_training
-from keys import BenchmarkName
-from keys import StatsTableKeys
-from keys import NameKeys
+from capsnet.config import SetupConfig
+from capsnet.config import ConfigSquash
+from capsnet.config import ConfigRecognition
+from capsnet.config import ConfigReconstruction
+from capsnet.config import ConfigAgreement
+from capsnet.config import ConfigTraining
+from capsnet.config import ConfigBenchmark
+from capsnet.config import ConfigPrimary
+from capsnet.config import ConfigConv
+from capsnet.train import do_training
+from capsnet.keys import BenchmarkName
+from capsnet.keys import StatsTableKeys
+from capsnet.keys import NameKeys
 
 
 def fill_stats(json_stats: Dict[str, Any], 

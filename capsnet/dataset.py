@@ -23,7 +23,7 @@ from torch.nn import Module
 from torch.utils.data import Dataset
 from torchvision.transforms import Compose
 
-from keys import TableColumns
+from capsnet.keys import TableColumns
 
 TransformType = Union[None, Compose, Module]
 

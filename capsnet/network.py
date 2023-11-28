@@ -11,11 +11,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from layers import ConvLayer
-from layers import PrimaryCaps
-from layers import RecognitionCaps
-from layers import ReconstructionNet
-from config import ConfigNetwork
+from capsnet.layers import ConvLayer
+from capsnet.layers import PrimaryCaps
+from capsnet.layers import RecognitionCaps
+from capsnet.layers import ReconstructionNet
+from capsnet.config import ConfigNetwork
 
 TypingFloatTensor = Union[torch.FloatTensor, torch.cuda.FloatTensor]
 TypingBoolTensor = Union[torch.BoolTensor, torch.cuda.BoolTensor]
